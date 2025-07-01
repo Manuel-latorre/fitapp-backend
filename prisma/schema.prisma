@@ -1,0 +1,125 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id             String   @id @default(uuid())
+  role           String   // "user" | "trainer" | "admin"
+  name           String
+  email          String   @unique
+  password       String   // Contraseña hasheada con bcrypt
+  phone          String?
+  profilePicture String?  @map("profile_picture")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  // Relaciones
+  plans            Plan[]
+  exerciseTracking ExerciseTracking[]
+  sentInvitations  UserInvitation[]
+
+  @@map("users")
+}
+
+model Plan {
+  id          String   @id @default(uuid())
+  userId      String   @map("user_id")
+  title       String
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  // Relaciones
+  user     User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sessions PlanSession[]
+
+  @@map("plans")
+}
+
+model PlanSession {
+  id            String   @id @default(uuid())
+  planId        String   @map("plan_id")
+  sessionNumber Int      @map("session_number")
+  name          String
+  completed     Boolean  @default(false)
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  // Relaciones
+  plan   Plan           @relation(fields: [planId], references: [id], onDelete: Cascade)
+  blocks SessionBlock[]
+
+  @@map("plan_sessions")
+}
+
+model SessionBlock {
+  id        String   @id @default(uuid())
+  sessionId String   @map("session_id")
+  title     String
+  position  Int
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relaciones
+  session   PlanSession     @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  exercises BlockExercise[]
+
+  @@map("session_blocks")
+}
+
+model BlockExercise {
+  id           String   @id @default(uuid())
+  blockId      String   @map("block_id")
+  exerciseName String   @map("exercise_name")
+  series       Int
+  reps         String
+  rest         String?
+  observations String?
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  // Relaciones
+  block    SessionBlock       @relation(fields: [blockId], references: [id], onDelete: Cascade)
+  tracking ExerciseTracking[]
+
+  @@map("block_exercises")
+}
+
+model ExerciseTracking {
+  id         String   @id @default(uuid())
+  exerciseId String   @map("exercise_id")
+  userId     String   @map("user_id")
+  kg         String?
+  pse        String?
+  rir        String?
+  done       Boolean  @default(false)
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  // Relaciones
+  exercise BlockExercise @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
+  user     User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("exercise_tracking")
+}
+
+model UserInvitation {
+  id        String    @id @default(uuid())
+  email     String
+  token     String    @unique
+  invitedBy String    @map("invited_by")
+  expiresAt DateTime  @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  // Relaciones
+  inviter User @relation(fields: [invitedBy], references: [id], onDelete: Cascade)
+
+  @@map("user_invitations")
+}

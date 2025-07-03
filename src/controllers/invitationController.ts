@@ -5,19 +5,20 @@ import { z } from 'zod';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import bcrypt from 'bcrypt';
+import { EmailService } from '../services/email';
 
 // Esquemas de validación
 const inviteUserSchema = z.object({
   email: z.string().email('Invalid email format'),
   role: z.enum(['user', 'trainer']).default('user'),
-  name: z.string().min(1, 'Name is required').optional()
+  name: z.string().min(1, 'Name is required'),
+  phone: z.string().optional(),
+  new: z.string().optional()
 });
 
 const completeRegistrationSchema = z.object({
   token: z.string().min(1, 'Token is required'),
-  name: z.string().min(1, 'Name is required'),
   password: z.string().min(6, 'Password must be at least 6 characters'),
-  phone: z.string().optional(),
   profilePicture: z.string().url().optional()
 });
 
@@ -31,7 +32,12 @@ export class InvitationController {
         throw createError('Invalid input data', 400);
       }
 
-      const { email, role, name } = validation.data;
+      const { email, role, name, phone, new: isNew} = validation.data;
+      
+      // Log para depuración
+      console.log('✅ Valor recibido de "new":', isNew, '(tipo:', typeof isNew, ')');
+
+      
       const adminId = req.user?.id;
 
       if (!adminId) {
@@ -78,13 +84,20 @@ export class InvitationController {
       const expiresAt = new Date();
       expiresAt.setDate(expiresAt.getDate() + 7);
 
-      // Crear invitación
+      // Crear invitación con datos adicionales
       const invitation = await prisma.userInvitation.create({
         data: {
           email,
           token: invitationToken,
           invitedBy: adminId,
-          expiresAt
+          expiresAt,
+          // Guardar datos adicionales en metadata (JSON)
+          metadata: JSON.stringify({
+            name,
+            phone,
+            role,
+            new: isNew
+          })
         },
         include: {
           inviter: {
@@ -96,12 +109,34 @@ export class InvitationController {
         }
       });
 
-      // Generar magic link
-      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
-      const magicLink = `${frontendUrl}/register?token=${invitationToken}`;
+      // Log para verificar metadata guardado
+      console.log('💾 Metadata guardado:', JSON.stringify({
+        name,
+        phone,
+        role,
+        new: isNew
+      }));
 
-      // TODO: Enviar email con Resend (lo implementaremos después)
-      console.log(`📧 Magic link for ${email}: ${magicLink}`);
+      // Generar magic link con datos pre-cargados
+      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+      const magicLink = `${frontendUrl}/register?token=${invitationToken}&name=${encodeURIComponent(name)}&phone=${encodeURIComponent(phone || '')}&role=${role}&new=${isNew}`;
+      
+      // Log para verificar el link generado
+      console.log('🔗 Link generado:', magicLink);
+      console.log('🔗 Valor de "new" en el link:', isNew);
+
+      // Enviar email con Resend
+      const emailResult = await EmailService.sendInvitationEmail(
+        email,
+        magicLink,
+        invitation.inviter.name,
+        role
+      );
+
+      if (!emailResult.success) {
+        console.error('Failed to send invitation email:', emailResult.error);
+        // No fallamos la operación si el email falla, solo loggeamos
+      }
 
       res.status(201).json({
         message: 'Invitation sent successfully',
@@ -109,9 +144,11 @@ export class InvitationController {
           id: invitation.id,
           email: invitation.email,
           role,
+          new: isNew,
           expiresAt: invitation.expiresAt,
-          magicLink, // Solo para desarrollo
-          invitedBy: invitation.inviter.name
+          magicLink: process.env.NODE_ENV === 'development' ? magicLink : undefined, // Solo en desarrollo
+          invitedBy: invitation.inviter.name,
+          emailSent: emailResult.success
         }
       });
     } catch (error) {
@@ -152,12 +189,23 @@ export class InvitationController {
         throw createError('Invitation has expired', 410);
       }
 
+      // Parsear metadata si existe
+      let metadata = null;
+      if (invitation.metadata) {
+        try {
+          metadata = JSON.parse(invitation.metadata);
+        } catch (error) {
+          console.error('Error parsing invitation metadata:', error);
+        }
+      }
+
       res.json({
         message: 'Invitation is valid',
         invitation: {
           email: invitation.email,
           invitedBy: invitation.inviter.name,
-          expiresAt: invitation.expiresAt
+          expiresAt: invitation.expiresAt,
+          metadata // Datos pre-cargados por el admin
         }
       });
     } catch (error) {
@@ -174,7 +222,7 @@ export class InvitationController {
         throw createError('Invalid input data', 400);
       }
 
-      const { token, name, password, phone, profilePicture } = validation.data;
+      const { token, password, profilePicture } = validation.data;
 
       // Verificar invitación
       const invitation = await prisma.userInvitation.findUnique({
@@ -206,16 +254,39 @@ export class InvitationController {
       const saltRounds = 10;
       const hashedPassword = await bcrypt.hash(password, saltRounds);
 
+      // Parsear metadata para obtener datos pre-cargados
+      let metadata = null;
+      if (invitation.metadata) {
+        try {
+          metadata = JSON.parse(invitation.metadata);
+          
+          // Log para depuración del metadata
+          console.log('📋 Metadata parseado:', metadata);
+          console.log('📋 Tipo de metadata.new:', typeof metadata.new, 'Valor:', metadata.new);
+          
+        } catch (error) {
+          console.error('Error parsing invitation metadata:', error);
+          throw createError('Invalid invitation data', 400);
+        }
+      }
+
+      if (!metadata || !metadata.name) {
+        throw createError('Invalid invitation data', 400);
+      }
+
       // Transacción para crear usuario y marcar invitación como usada
       const result = await prisma.$transaction(async (tx) => {
-        // Crear usuario
+        // Crear usuario con datos de metadata
+        console.log('👤 Creando usuario con new:', metadata.new, '(tipo:', typeof metadata.new, ')');
+        
         const user = await tx.user.create({
           data: {
             email: invitation.email,
-            name,
+            name: metadata.name,
             password: hashedPassword,
-            role: 'user', // Por defecto, puede ser configurado según la invitación
-            phone,
+            role: metadata.role || 'user',
+            phone: metadata.phone || null,
+            new: metadata.new, // Siempre string
             profilePicture
           }
         });
@@ -250,6 +321,7 @@ export class InvitationController {
           email: result.email,
           role: result.role,
           phone: result.phone,
+          new: result.new,
           profilePicture: result.profilePicture
         }
       });

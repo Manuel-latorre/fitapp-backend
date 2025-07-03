@@ -240,7 +240,15 @@ router.post('/auth/generate-token', requireAdmin, AuthController.generateToken)
  * /invitations/invite:
  *   post:
  *     summary: Invitar usuario (Solo Admin)
- *     description: Enviar invitación por magic link a un nuevo usuario
+ *     description: |
+ *       Enviar invitación por email a un nuevo usuario con datos pre-cargados.
+ *       
+ *       **Características:**
+ *       - El admin puede pre-cargar nombre, teléfono y rol
+ *       - Se envía un email profesional con magic link
+ *       - El usuario solo necesita crear su contraseña
+ *       - Los datos pre-cargados se incluyen en la URL del magic link
+ *       - Expiración automática en 7 días
  *     tags: [Invitations]
  *     security:
  *       - bearerAuth: []
@@ -252,20 +260,38 @@ router.post('/auth/generate-token', requireAdmin, AuthController.generateToken)
  *             type: object
  *             required:
  *               - email
+ *               - name
  *             properties:
  *               email:
  *                 type: string
  *                 format: email
  *                 example: nuevo@usuario.com
+ *               name:
+ *                 type: string
+ *                 example: María López
+ *               phone:
+ *                 type: string
+ *                 example: "+34 622 333 444"
+ *               role:
+ *                 type: string
+ *                 enum: [user, trainer]
+ *                 default: user
+ *                 example: user
  *           examples:
  *             nuevo_usuario:
  *               summary: Invitar nuevo usuario
  *               value:
  *                 email: "maria.lopez@email.com"
+ *                 name: "María López"
+ *                 phone: "+34 622 333 444"
+ *                 role: "user"
  *             nuevo_entrenador:
  *               summary: Invitar nuevo entrenador
  *               value:
  *                 email: "carlos.trainer@fitgym.com"
+ *                 name: "Carlos Trainer"
+ *                 phone: "+34 611 222 333"
+ *                 role: "trainer"
  *     responses:
  *       201:
  *         description: Invitación enviada exitosamente
@@ -276,36 +302,73 @@ router.post('/auth/generate-token', requireAdmin, AuthController.generateToken)
  *               properties:
  *                 message:
  *                   type: string
+ *                   example: "Invitation sent successfully"
  *                 invitation:
- *                   $ref: '#/components/schemas/UserInvitation'
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: string
+ *                       format: uuid
+ *                     email:
+ *                       type: string
+ *                       format: email
+ *                     role:
+ *                       type: string
+ *                       enum: [user, trainer]
+ *                     expiresAt:
+ *                       type: string
+ *                       format: date-time
+ *                     invitedBy:
+ *                       type: string
+ *                     emailSent:
+ *                       type: boolean
+ *                       description: Indica si el email se envió correctamente
  *                 magicLink:
  *                   type: string
+ *                   description: URL del magic link (solo en desarrollo)
+ *                   example: "http://localhost:5173/register?token=abc123&name=María%20López&phone=%2B34%20622%20333%20444&role=user"
  *             examples:
  *               invitation_sent:
  *                 summary: Invitación enviada exitosamente
  *                 value:
- *                   message: "Invitación enviada exitosamente"
+ *                   message: "Invitation sent successfully"
  *                   invitation:
  *                     id: "bb0e8400-e29b-41d4-a716-446655440006"
  *                     email: "maria.lopez@email.com"
- *                     token: "inv_maria_xyz789"
- *                     invitedBy: "admin-uuid-123"
+ *                     role: "user"
  *                     expiresAt: "2024-01-08T12:00:00.000Z"
- *                     usedAt: null
- *                     createdAt: "2024-01-01T12:00:00.000Z"
- *                   magicLink: "http://localhost:3000/invite?token=inv_maria_xyz789"
+ *                     invitedBy: "Administrator"
+ *                     emailSent: true
+ *                   magicLink: "http://localhost:5173/register?token=inv_maria_xyz789&name=María%20López&phone=%2B34%20622%20333%20444&role=user"
  *       400:
- *         description: Email ya invitado o usuario ya existe
+ *         description: Datos inválidos o email ya invitado
  *         content:
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/Error'
  *             examples:
+ *               invalid_data:
+ *                 summary: Datos de entrada inválidos
+ *                 value:
+ *                   error: "BadRequest"
+ *                   message: "Invalid input data"
+ *                   details: [
+ *                     {
+ *                       field: "name",
+ *                       message: "Name is required"
+ *                     }
+ *                   ]
  *               already_invited:
  *                 summary: Email ya invitado
  *                 value:
  *                   error: "BadRequest"
- *                   message: "Este email ya tiene una invitación pendiente"
+ *                   message: "An active invitation already exists for this email"
+ *                   details: []
+ *               user_exists:
+ *                 summary: Usuario ya existe
+ *                 value:
+ *                   error: "BadRequest"
+ *                   message: "User with this email already exists"
  *                   details: []
  *       403:
  *         description: Permisos insuficientes
@@ -328,7 +391,13 @@ router.post('/invitations/invite', authMiddleware, requireAdmin, InvitationContr
  * /invitations/verify/{token}:
  *   get:
  *     summary: Verificar token de invitación
- *     description: Verificar la validez de un token de invitación
+ *     description: |
+ *       Verificar la validez de un token de invitación y obtener datos pre-cargados.
+ *       
+ *       **Devuelve:**
+ *       - Estado de la invitación (válida/expirada/usada)
+ *       - Datos pre-cargados por el admin (nombre, teléfono, rol)
+ *       - Información del admin que envió la invitación
  *     tags: [Invitations]
  *     parameters:
  *       - in: path
@@ -340,8 +409,74 @@ router.post('/invitations/invite', authMiddleware, requireAdmin, InvitationContr
  *     responses:
  *       200:
  *         description: Token válido
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: "Invitation is valid"
+ *                 invitation:
+ *                   type: object
+ *                   properties:
+ *                     email:
+ *                       type: string
+ *                       format: email
+ *                     invitedBy:
+ *                       type: string
+ *                     expiresAt:
+ *                       type: string
+ *                       format: date-time
+ *                     metadata:
+ *                       type: object
+ *                       description: Datos pre-cargados por el admin
+ *                       properties:
+ *                         name:
+ *                           type: string
+ *                         phone:
+ *                           type: string
+ *                         role:
+ *                           type: string
+ *                           enum: [user, trainer]
+ *             examples:
+ *               valid_invitation:
+ *                 summary: Invitación válida con datos pre-cargados
+ *                 value:
+ *                   message: "Invitation is valid"
+ *                   invitation:
+ *                     email: "maria.lopez@email.com"
+ *                     invitedBy: "Administrator"
+ *                     expiresAt: "2024-01-08T12:00:00.000Z"
+ *                     metadata:
+ *                       name: "María López"
+ *                       phone: "+34 622 333 444"
+ *                       role: "user"
  *       400:
  *         description: Token inválido o expirado
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *             examples:
+ *               invalid_token:
+ *                 summary: Token inválido
+ *                 value:
+ *                   error: "NotFound"
+ *                   message: "Invalid invitation token"
+ *                   details: []
+ *               expired_token:
+ *                 summary: Token expirado
+ *                 value:
+ *                   error: "Gone"
+ *                   message: "Invitation has expired"
+ *                   details: []
+ *               used_token:
+ *                 summary: Token ya usado
+ *                 value:
+ *                   error: "Gone"
+ *                   message: "Invitation has already been used"
+ *                   details: []
  */
 router.get('/invitations/verify/:token', InvitationController.verifyInvitation)
 
@@ -350,7 +485,12 @@ router.get('/invitations/verify/:token', InvitationController.verifyInvitation)
  * /invitations/complete:
  *   post:
  *     summary: Completar registro con invitación
- *     description: Completar el registro de usuario usando un token de invitación válido
+ *     description: |
+ *       Completar el registro de usuario usando un token de invitación válido.
+ *       
+ *       **Nota:** El usuario solo necesita proporcionar su contraseña.
+ *       Los datos como nombre, teléfono y rol ya están pre-cargados
+ *       por el administrador en la invitación.
  *     tags: [Invitations]
  *     requestBody:
  *       required: true
@@ -360,23 +500,15 @@ router.get('/invitations/verify/:token', InvitationController.verifyInvitation)
  *             type: object
  *             required:
  *               - token
- *               - name
  *               - password
  *             properties:
  *               token:
  *                 type: string
  *                 example: inv_maria_xyz789
- *               name:
- *                 type: string
- *                 example: María López
  *               password:
  *                 type: string
  *                 minLength: 6
  *                 example: micontraseña123
- *               phone:
- *                 type: string
- *                 nullable: true
- *                 example: "+34 622 333 444"
  *               profilePicture:
  *                 type: string
  *                 format: uri
@@ -384,18 +516,15 @@ router.get('/invitations/verify/:token', InvitationController.verifyInvitation)
  *                 example: "https://example.com/maria-profile.jpg"
  *           examples:
  *             registro_completo:
- *               summary: Registro completo con todos los datos
+ *               summary: Registro con contraseña y foto de perfil
  *               value:
  *                 token: "inv_maria_xyz789"
- *                 name: "María López"
  *                 password: "micontraseña123"
- *                 phone: "+34 622 333 444"
  *                 profilePicture: "https://example.com/maria-profile.jpg"
  *             registro_basico:
- *               summary: Registro con datos mínimos
+ *               summary: Registro solo con contraseña
  *               value:
  *                 token: "inv_carlos_abc123"
- *                 name: "Carlos Trainer"
  *                 password: "entrenador456"
  *     responses:
  *       201:

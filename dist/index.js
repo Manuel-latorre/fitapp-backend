@@ -17,9 +17,28 @@ const PORT = process.env.PORT || 3000;
 // Middleware de seguridad
 app.use((0, helmet_1.default)());
 // CORS configuration
+const allowedOrigins = [
+    'http://localhost:3000',
+    'http://localhost:5173', // Vite frontend
+    'http://localhost:5174', // Vite preview
+    process.env.CORS_ORIGIN,
+    process.env.FRONTEND_URL, // Frontend configurado
+].filter(Boolean);
 app.use((0, cors_1.default)({
-    origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
+    origin: (origin, callback) => {
+        // Permitir requests sin origin (como aplicaciones móviles o Postman)
+        if (!origin)
+            return callback(null, true);
+        if (allowedOrigins.indexOf(origin) !== -1) {
+            callback(null, true);
+        }
+        else {
+            callback(new Error('Not allowed by CORS'));
+        }
+    },
     credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
 }));
 // Body parsing middleware
 app.use(express_1.default.json({ limit: '10mb' }));

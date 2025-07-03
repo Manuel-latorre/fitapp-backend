@@ -1,7 +1,7 @@
 import { Resend } from 'resend';
 
 const resend = new Resend(process.env.RESEND_API_KEY);
-const fromEmail = process.env.FROM_EMAIL || 'noreply@example.com';
+const fromEmail = process.env.FROM_EMAIL || 'FitApp <noreply@martupf.com>';
 
 export interface EmailOptions {
   to: string | string[];
@@ -62,6 +62,20 @@ export class EmailService {
     });
   }
 
+  static async sendInvitationEmail(to: string, magicLink: string, invitedByName: string, role: string): Promise<{ success: boolean; error?: string }> {
+    return this.sendEmail({
+      to,
+      subject: `Invitación a FitApp - ${invitedByName} te ha invitado`,
+      template: 'invitation',
+      data: { 
+        magicLink, 
+        invitedByName, 
+        role,
+        appName: 'FitApp'
+      }
+    });
+  }
+
 
 
   private static getTemplate(template: string, data: Record<string, any> = {}): string {
@@ -100,6 +114,80 @@ export class EmailService {
           <p>${data.message}</p>
           <hr style="margin: 20px 0;">
           <p style="color: #666; font-size: 12px;">Notificación automática del sistema.</p>
+        </div>
+      `,
+      invitation: (data) => `
+        <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+          <div style="background: white; padding: 40px; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.2);">
+            <!-- Header con logo -->
+            <div style="text-align: center; margin-bottom: 30px;">
+              <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); width: 80px; height: 80px; border-radius: 50%; margin: 0 auto 20px; display: flex; align-items: center; justify-content: center;">
+                <span style="color: white; font-size: 32px; font-weight: bold;">F</span>
+              </div>
+              <h1 style="color: #2c3e50; margin: 0; font-size: 28px; font-weight: 600;">¡Invitación a FitApp!</h1>
+              <p style="color: #7f8c8d; margin: 10px 0 0; font-size: 16px;">Tu plataforma de entrenamiento personal</p>
+            </div>
+            
+            <!-- Contenido principal -->
+            <div style="background: #f8f9fa; padding: 25px; border-radius: 10px; margin: 20px 0;">
+              <p style="color: #34495e; font-size: 18px; line-height: 1.6; margin: 0 0 15px;">
+                Hola, <strong>${data.invitedByName}</strong> te ha invitado a unirte a FitApp como <strong>${data.role === 'trainer' ? 'Entrenador' : 'Usuario'}</strong>.
+              </p>
+              
+              <p style="color: #34495e; font-size: 16px; line-height: 1.6; margin: 0;">
+                Para completar tu registro, haz clic en el siguiente botón:
+              </p>
+            </div>
+            
+            <!-- Botón de acción -->
+            <div style="text-align: center; margin: 35px 0;">
+              <a href="${data.magicLink}" 
+                 style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+                        color: white; 
+                        padding: 18px 40px; 
+                        text-decoration: none; 
+                        border-radius: 30px; 
+                        display: inline-block; 
+                        font-weight: 600;
+                        font-size: 18px;
+                        box-shadow: 0 8px 25px rgba(102, 126, 234, 0.4);
+                        transition: all 0.3s ease;">
+                🚀 Completar Registro
+              </a>
+            </div>
+            
+            <!-- Enlace alternativo -->
+            <div style="background: #ecf0f1; padding: 20px; border-radius: 8px; margin: 20px 0;">
+              <p style="color: #7f8c8d; font-size: 14px; text-align: center; margin: 0 0 10px;">
+                <strong>¿No funciona el botón?</strong> Copia y pega este enlace:
+              </p>
+              <p style="background: white; padding: 12px; border-radius: 6px; margin: 0; word-break: break-all;">
+                <a href="${data.magicLink}" style="color: #3498db; text-decoration: none; font-size: 13px;">${data.magicLink}</a>
+              </p>
+            </div>
+            
+            <!-- Información importante -->
+            <div style="background: #e8f4fd; padding: 25px; border-radius: 10px; margin: 25px 0; border-left: 4px solid #3498db;">
+              <h3 style="color: #2c3e50; margin: 0 0 15px; font-size: 18px;">📋 Información importante:</h3>
+              <ul style="color: #34495e; line-height: 1.8; margin: 0; padding-left: 20px;">
+                <li>Este enlace expira en <strong>7 días</strong></li>
+                <li>Solo necesitarás crear tu contraseña</li>
+                <li>Tu nombre y teléfono ya están configurados</li>
+                <li>Si tienes problemas, contacta al administrador</li>
+              </ul>
+            </div>
+            
+            <!-- Footer -->
+            <div style="text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #ecf0f1;">
+              <p style="color: #95a5a6; font-size: 12px; margin: 0;">
+                Este es un correo automático de <strong>FitApp</strong>.<br>
+                Enviado desde <strong>noreply@martupf.com</strong>
+              </p>
+              <p style="color: #bdc3c7; font-size: 11px; margin: 10px 0 0;">
+                No respondas a este mensaje. Si necesitas ayuda, contacta al administrador.
+              </p>
+            </div>
+          </div>
         </div>
       `
     };

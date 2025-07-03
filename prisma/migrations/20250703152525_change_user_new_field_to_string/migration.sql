@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE "users" ALTER COLUMN "new" SET DEFAULT 'true',
+ALTER COLUMN "new" SET DATA TYPE TEXT;

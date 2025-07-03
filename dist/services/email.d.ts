@@ -24,6 +24,10 @@ export declare class EmailService {
         success: boolean;
         error?: string;
     }>;
+    static sendInvitationEmail(to: string, magicLink: string, invitedByName: string, role: string): Promise<{
+        success: boolean;
+        error?: string;
+    }>;
     private static getTemplate;
 }
 //# sourceMappingURL=email.d.ts.map

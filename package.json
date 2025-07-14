@@ -7,10 +7,20 @@
     "dev": "nodemon src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
+    "db:check": "node scripts/check-db.js",
     "db:migrate": "npx prisma migrate dev",
     "db:generate": "npx prisma generate",
     "db:studio": "npx prisma studio",
-    "db:seed": "tsx src/database/seed.ts"
+    "db:seed": "tsx src/database/seed.ts",
+    "db:docker": "docker-compose up -d postgres",
+    "db:docker-stop": "docker-compose down",
+    "db:docker-logs": "docker-compose logs postgres",
+    "db:admin": "docker-compose up -d adminer",
+    "prestart": "npm run db:check",
+    "predev": "npm run db:check",
+    "setup": "npm run db:generate && npm run db:migrate && npm run build",
+    "quick-start": "node scripts/quick-start.js",
+    "seed": "node scripts/insert-example-data.js"
   },
   "keywords": [
     "typescript",

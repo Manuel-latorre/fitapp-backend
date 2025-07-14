@@ -73,62 +73,65 @@ API completa para la aplicación de seguimiento de ejercicios y planes de entren
 
 ## 🛠️ Instalación y Configuración
 
-### 1. Clonar e instalar dependencias
+### 🚀 Método Rápido (Recomendado)
 
 ```bash
+# 1. Clonar e instalar dependencias
 git clone <repositorio>
 cd fitapp-backend
 npm install
+
+# 2. Configuración automática (requiere Docker)
+npm run quick-start
+
+# 3. Iniciar servidor
+npm run dev
 ```
 
-### 2. Configurar variables de entorno
+### 🔧 Método Manual
 
-Crear archivo `.env`:
+Si prefieres configurar manualmente o no tienes Docker:
 
-```env
-# Base de datos
-DATABASE_URL="postgresql://usuario:password@localhost:5432/fitapp_db"
-
-# JWT
-JWT_SECRET="tu_jwt_secret_super_seguro"
-JWT_EXPIRES_IN="24h"
-
-# Email (para futuras implementaciones)
-RESEND_API_KEY="tu_resend_api_key"
-FROM_EMAIL="noreply@fitapp.com"
-
-# Servidor
-PORT=3000
-NODE_ENV="development"
-```
-
-### 3. Configurar base de datos PostgreSQL
-
-```sql
--- Ejecutar en pgAdmin o terminal PostgreSQL
-CREATE DATABASE fitapp_db;
-```
-
-### 4. Ejecutar migraciones
-
+1. **Instalar dependencias**:
 ```bash
-# Generar cliente Prisma
-npx prisma generate
-
-# Ejecutar script SQL
-# Copiar contenido de database-setup.sql y ejecutar en pgAdmin
-
-# Para agregar tabla de invitaciones (si no existe)
-# Copiar contenido de add-invitations-table.sql y ejecutar en pgAdmin
+npm install
 ```
 
-### 5. Crear usuario administrador
+2. **Crear archivo `.env`**:
+```env
+DATABASE_URL="postgresql://fitapp_user:fitapp_password@localhost:5432/fitapp_db?schema=public"
+PORT=3000
+NODE_ENV=development
+CORS_ORIGIN=http://localhost:3000
+```
 
+3. **Configurar base de datos**:
+```bash
+# Opción A: Con Docker (fácil)
+npm run db:docker
+
+# Opción B: PostgreSQL local
+# Ver DATABASE_SETUP.md para instrucciones detalladas
+```
+
+4. **Configurar aplicación**:
+```bash
+npm run setup
+```
+
+5. **Iniciar servidor**:
 ```bash
 npm run dev
+```
 
-# Hacer POST a http://localhost:3000/api/admin/setup
-curl -X POST http://localhost:3000/api/admin/setup
+### 📋 Verificación rápida
+
+```bash
+# Verificar conexión a base de datos
+npm run db:check
+
+# Ver estado de la aplicación
+curl http://localhost:3000/health
 ```
 
 ## 🏃‍♂️ Ejecución
@@ -206,62 +209,7 @@ PUT  /api/tracking/:id/done          # Marcar completado
 ### 📈 Estadísticas
 ```
 GET /api/users/:userId/stats         # Estadísticas de usuario
-```
 
-## 🔧 Ejemplos de Uso
-
-### Flujo de Invitación Completo
-
-1. **Admin invita usuario**:
-```bash
-curl -X POST http://localhost:3000/api/invitations/invite \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer <admin_token>" \
-  -d '{"email": "nuevo@usuario.com"}'
-```
-
-2. **Usuario verifica invitación**:
-```bash
-curl http://localhost:3000/api/invitations/verify/inv_token_123
-```
-
-3. **Usuario completa registro**:
-```bash
-curl -X POST http://localhost:3000/api/invitations/complete \
-  -H "Content-Type: application/json" \
-  -d '{
-    "token": "inv_token_123",
-    "name": "Juan Pérez",
-    "phone": "+34 600 123 456"
-  }'
-```
-
-### Crear Plan de Entrenamiento
-
-```bash
-curl -X POST http://localhost:3000/api/plans \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer <token>" \
-  -d '{
-    "userId": "user-uuid",
-    "title": "Plan de Fuerza - Semana 1",
-    "description": "Plan enfocado en desarrollo de fuerza"
-  }'
-```
-
-### Registrar Seguimiento
-
-```bash
-curl -X POST http://localhost:3000/api/tracking \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer <token>" \
-  -d '{
-    "exerciseId": "exercise-uuid",
-    "userId": "user-uuid",
-    "kg": "80",
-    "pse": "8",
-    "rir": "2"
-  }'
 ```
 
 ## 🏗️ Arquitectura
@@ -324,25 +272,3 @@ src/
 - [ ] API de estadísticas avanzadas
 - [ ] Exportación de datos
 - [ ] Sistema de backup automático
-
-## 🤝 Contribución
-
-1. Fork del proyecto
-2. Crear rama feature (`git checkout -b feature/nueva-caracteristica`)
-3. Commit cambios (`git commit -am 'Agregar nueva característica'`)
-4. Push a la rama (`git push origin feature/nueva-caracteristica`)
-5. Crear Pull Request
-
-## 📄 Licencia
-
-Este proyecto está bajo la Licencia MIT - ver el archivo [LICENSE.md](LICENSE.md) para detalles.
-
-## 👨‍💻 Autor
-
-**FitApp Development Team**
-- Email: admin@fitapp.com
-- Documentación: http://localhost:3000/api-docs
-
----
-
-**🚀 ¡FitApp Backend está listo para usar! Abre http://localhost:3000/api-docs para explorar toda la API de forma interactiva.** 

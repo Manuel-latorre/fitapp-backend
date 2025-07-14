@@ -9,42 +9,52 @@ datasource db {
 }
 
 model User {
-  id               String             @id @default(uuid())
-  role             String
-  name             String
-  email            String             @unique
-  password         String
-  new              String             @default("true")
-  phone            String?
-  profilePicture   String?            @map("profile_picture")
-  createdAt        DateTime           @default(now()) @map("created_at")
-  exerciseTracking ExerciseTracking[]
-  plans            Plan[]
-  sentInvitations  UserInvitation[]
+  id              String           @id @default(uuid())
+  role            String
+  name            String
+  email           String           @unique
+  password        String
+  new             String           @default("true")
+  phone           String?
+  profilePicture  String?          @map("profile_picture")
+  createdAt       DateTime         @default(now()) @map("created_at")
+  plans           Plan[]
+  sentInvitations UserInvitation[]
 
   @@map("users")
 }
 
 model Plan {
-  id          String        @id @default(uuid())
-  userId      String        @map("user_id")
+  id          String   @id @default(uuid())
+  userId      String   @map("user_id")
   title       String
   description String?
-  createdAt   DateTime      @default(now()) @map("created_at")
-  sessions    PlanSession[]
-  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now()) @map("created_at")
+  weeks       Week[]
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("plans")
 }
 
+model Week {
+  id        String        @id @default(uuid())
+  planId    String        @map("plan_id")
+  title     String
+  createdAt DateTime      @default(now()) @map("created_at")
+  plan      Plan          @relation(fields: [planId], references: [id], onDelete: Cascade)
+  sessions  PlanSession[]
+
+  @@map("weeks")
+}
+
 model PlanSession {
   id            String         @id @default(uuid())
-  planId        String         @map("plan_id")
+  weekId        String         @map("week_id")
   sessionNumber Int            @map("session_number")
   name          String
   completed     Boolean        @default(false)
   createdAt     DateTime       @default(now()) @map("created_at")
-  plan          Plan           @relation(fields: [planId], references: [id], onDelete: Cascade)
+  week          Week           @relation(fields: [weekId], references: [id], onDelete: Cascade)
   blocks        SessionBlock[]
 
   @@map("plan_sessions")
@@ -55,6 +65,7 @@ model SessionBlock {
   sessionId String          @map("session_id")
   title     String
   position  Int
+  status    String
   createdAt DateTime        @default(now()) @map("created_at")
   exercises BlockExercise[]
   session   PlanSession     @relation(fields: [sessionId], references: [id], onDelete: Cascade)
@@ -63,33 +74,24 @@ model SessionBlock {
 }
 
 model BlockExercise {
-  id           String             @id @default(uuid())
-  blockId      String             @map("block_id")
-  exerciseName String             @map("exercise_name")
+  id           String       @id @default(uuid())
+  blockId      String       @map("block_id")
+  exerciseName String       @map("exercise_name")
   series       Int
   reps         String
+  kg           Float?
   rest         String?
   observations String?
-  createdAt    DateTime           @default(now()) @map("created_at")
-  block        SessionBlock       @relation(fields: [blockId], references: [id], onDelete: Cascade)
-  tracking     ExerciseTracking[]
+  status       String       @default("pending")
+  pse          String?
+  rir          String?
+  done         Boolean      @default(false)
+  completedAt  DateTime?    @map("completed_at")
+  createdAt    DateTime     @default(now()) @map("created_at")
+  link         String?
+  block        SessionBlock @relation(fields: [blockId], references: [id], onDelete: Cascade)
 
   @@map("block_exercises")
-}
-
-model ExerciseTracking {
-  id         String        @id @default(uuid())
-  exerciseId String        @map("exercise_id")
-  userId     String        @map("user_id")
-  kg         String?
-  pse        String?
-  rir        String?
-  done       Boolean       @default(false)
-  createdAt  DateTime      @default(now()) @map("created_at")
-  exercise   BlockExercise @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
-  user       User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@map("exercise_tracking")
 }
 
 model UserInvitation {

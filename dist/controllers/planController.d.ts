@@ -8,6 +8,11 @@ export declare class PlanController {
     static createSession(req: Request, res: Response, next: NextFunction): Promise<void>;
     static createBlock(req: Request, res: Response, next: NextFunction): Promise<void>;
     static createExercise(req: Request, res: Response, next: NextFunction): Promise<void>;
+    static updateExercise(req: Request, res: Response, next: NextFunction): Promise<void>;
+    static deleteExercise(req: Request, res: Response, next: NextFunction): Promise<void>;
+    static updateBlock(req: Request, res: Response, next: NextFunction): Promise<void>;
+    static deleteBlock(req: Request, res: Response, next: NextFunction): Promise<void>;
+    static updateSession(req: Request, res: Response, next: NextFunction): Promise<void>;
     static completeSession(req: Request, res: Response, next: NextFunction): Promise<void>;
 }
 //# sourceMappingURL=planController.d.ts.map

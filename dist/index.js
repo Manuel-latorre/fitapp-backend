@@ -8,6 +8,7 @@ const cors_1 = __importDefault(require("cors"));
 const helmet_1 = __importDefault(require("helmet"));
 const dotenv_1 = __importDefault(require("dotenv"));
 const errorHandler_1 = require("./middlewares/errorHandler");
+const database_1 = require("./config/database");
 const index_1 = __importDefault(require("./routes/index"));
 const swagger_1 = require("./config/swagger");
 // Cargar variables de entorno
@@ -98,13 +99,24 @@ app.use('*', (req, res) => {
 });
 // Error handling middleware
 app.use(errorHandler_1.errorHandler);
-// Start server
-app.listen(PORT, () => {
-    console.log(`🚀 Server running on port ${PORT}`);
-    console.log(`📊 Environment: ${process.env.NODE_ENV}`);
-    console.log(`🔗 Health check: http://localhost:${PORT}/health`);
-    console.log(`📋 API Base URL: http://localhost:${PORT}/api`);
-    console.log(`📚 API Documentation: http://localhost:${PORT}/api-docs`);
-});
+// Start server with database initialization
+const startServer = async () => {
+    try {
+        console.log('🔄 Initializing database connection...');
+        await (0, database_1.initializeDatabase)();
+        app.listen(PORT, () => {
+            console.log(`🚀 Server running on port ${PORT}`);
+            console.log(`📊 Environment: ${process.env.NODE_ENV}`);
+            console.log(`🔗 Health check: http://localhost:${PORT}/health`);
+            console.log(`📋 API Base URL: http://localhost:${PORT}/api`);
+            console.log(`📚 API Documentation: http://localhost:${PORT}/api-docs`);
+        });
+    }
+    catch (error) {
+        console.error('❌ Failed to start server:', error);
+        process.exit(1);
+    }
+};
+startServer();
 exports.default = app;
 //# sourceMappingURL=index.js.map

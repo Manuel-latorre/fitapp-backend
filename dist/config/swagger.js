@@ -108,7 +108,7 @@ const options = {
                         title: {
                             type: 'string',
                             description: 'Título del plan',
-                            example: 'Plan de Fuerza - Semana 1'
+                            example: 'Plan de Fuerza - Enero 2024'
                         },
                         description: {
                             type: 'string',
@@ -121,18 +121,104 @@ const options = {
                             format: 'date-time',
                             example: '2024-01-01T12:00:00.000Z'
                         },
+                        weeks: {
+                            type: 'array',
+                            items: { $ref: '#/components/schemas/Week' }
+                        }
+                    },
+                    example: {
+                        id: '550e8400-e29b-41d4-a716-446655440000',
+                        userId: '123e4567-e89b-12d3-a456-426614174000',
+                        title: 'Plan de Fuerza - Enero 2024',
+                        description: 'Plan enfocado en desarrollo de fuerza básica con ejercicios compuestos',
+                        createdAt: '2024-01-01T12:00:00.000Z',
+                        weeks: [
+                            {
+                                id: '650e8400-e29b-41d4-a716-446655440001',
+                                planId: '550e8400-e29b-41d4-a716-446655440000',
+                                title: 'Semana 1 - Adaptación',
+                                createdAt: '2024-01-01T12:00:00.000Z',
+                                sessions: [
+                                    {
+                                        id: '660e8400-e29b-41d4-a716-446655440001',
+                                        weekId: '650e8400-e29b-41d4-a716-446655440001',
+                                        sessionNumber: 1,
+                                        name: 'Día 1 - Tren Superior',
+                                        completed: false,
+                                        createdAt: '2024-01-01T12:00:00.000Z'
+                                    },
+                                    {
+                                        id: '660e8400-e29b-41d4-a716-446655440002',
+                                        weekId: '650e8400-e29b-41d4-a716-446655440001',
+                                        sessionNumber: 2,
+                                        name: 'Día 2 - Tren Inferior',
+                                        completed: false,
+                                        createdAt: '2024-01-01T12:00:00.000Z'
+                                    }
+                                ]
+                            },
+                            {
+                                id: '650e8400-e29b-41d4-a716-446655440002',
+                                planId: '550e8400-e29b-41d4-a716-446655440000',
+                                title: 'Semana 2 - Progresión',
+                                createdAt: '2024-01-08T12:00:00.000Z',
+                                sessions: []
+                            }
+                        ]
+                    }
+                },
+                Week: {
+                    type: 'object',
+                    properties: {
+                        id: {
+                            type: 'string',
+                            format: 'uuid',
+                            example: '650e8400-e29b-41d4-a716-446655440001'
+                        },
+                        planId: {
+                            type: 'string',
+                            format: 'uuid',
+                            description: 'ID del plan al que pertenece',
+                            example: '550e8400-e29b-41d4-a716-446655440000'
+                        },
+                        title: {
+                            type: 'string',
+                            description: 'Título de la semana',
+                            example: 'Semana 1 - Adaptación'
+                        },
+                        createdAt: {
+                            type: 'string',
+                            format: 'date-time',
+                            example: '2024-01-01T12:00:00.000Z'
+                        },
                         sessions: {
                             type: 'array',
                             items: { $ref: '#/components/schemas/PlanSession' }
                         }
                     },
                     example: {
-                        id: '550e8400-e29b-41d4-a716-446655440000',
-                        userId: '123e4567-e89b-12d3-a456-426614174000',
-                        title: 'Plan de Fuerza - Semana 1',
-                        description: 'Plan enfocado en desarrollo de fuerza básica con ejercicios compuestos',
+                        id: '650e8400-e29b-41d4-a716-446655440001',
+                        planId: '550e8400-e29b-41d4-a716-446655440000',
+                        title: 'Semana 1 - Adaptación',
                         createdAt: '2024-01-01T12:00:00.000Z',
-                        sessions: []
+                        sessions: [
+                            {
+                                id: '660e8400-e29b-41d4-a716-446655440001',
+                                weekId: '650e8400-e29b-41d4-a716-446655440001',
+                                sessionNumber: 1,
+                                name: 'Día 1 - Tren Superior',
+                                completed: false,
+                                createdAt: '2024-01-01T12:00:00.000Z'
+                            },
+                            {
+                                id: '660e8400-e29b-41d4-a716-446655440002',
+                                weekId: '650e8400-e29b-41d4-a716-446655440001',
+                                sessionNumber: 2,
+                                name: 'Día 2 - Tren Inferior',
+                                completed: false,
+                                createdAt: '2024-01-01T12:00:00.000Z'
+                            }
+                        ]
                     }
                 },
                 PlanSession: {
@@ -143,10 +229,11 @@ const options = {
                             format: 'uuid',
                             example: '660e8400-e29b-41d4-a716-446655440001'
                         },
-                        planId: {
+                        weekId: {
                             type: 'string',
                             format: 'uuid',
-                            example: '550e8400-e29b-41d4-a716-446655440000'
+                            description: 'ID de la semana a la que pertenece',
+                            example: '650e8400-e29b-41d4-a716-446655440001'
                         },
                         sessionNumber: {
                             type: 'integer',
@@ -173,7 +260,7 @@ const options = {
                     },
                     example: {
                         id: '660e8400-e29b-41d4-a716-446655440001',
-                        planId: '550e8400-e29b-41d4-a716-446655440000',
+                        weekId: '650e8400-e29b-41d4-a716-446655440001',
                         sessionNumber: 1,
                         name: 'Sesión 1 - Tren Superior',
                         completed: false,
@@ -203,6 +290,11 @@ const options = {
                             description: 'Posición para ordenamiento',
                             example: 1
                         },
+                        status: {
+                            type: 'string',
+                            description: 'Estado del bloque (pending, in_progress, completed)',
+                            example: 'pending'
+                        },
                         createdAt: {
                             type: 'string',
                             format: 'date-time',
@@ -214,6 +306,7 @@ const options = {
                         sessionId: '660e8400-e29b-41d4-a716-446655440001',
                         title: 'Bloque A - Ejercicios principales',
                         position: 1,
+                        status: 'pending',
                         createdAt: '2024-01-01T12:00:00.000Z'
                     }
                 },
@@ -245,6 +338,12 @@ const options = {
                             description: 'Especificación de repeticiones (ej: "8/8", "10", "20\\"20\\"")',
                             example: '8'
                         },
+                        kg: {
+                            type: 'number',
+                            nullable: true,
+                            description: 'Peso en kilogramos usado por el usuario',
+                            example: 80.5
+                        },
                         rest: {
                             type: 'string',
                             nullable: true,
@@ -254,54 +353,19 @@ const options = {
                         observations: {
                             type: 'string',
                             nullable: true,
-                            description: 'Observaciones del ejercicio',
-                            example: 'Controlar la fase excéntrica, pausa de 1 segundo en el pecho'
+                            description: 'Observaciones del admin o usuario sobre el ejercicio',
+                            example: 'Excelente técnica, aumentar peso próxima vez'
                         },
-                        createdAt: {
+                        status: {
                             type: 'string',
-                            format: 'date-time',
-                            example: '2024-01-01T12:00:00.000Z'
-                        }
-                    },
-                    example: {
-                        id: '880e8400-e29b-41d4-a716-446655440003',
-                        blockId: '770e8400-e29b-41d4-a716-446655440002',
-                        exerciseName: 'Press de banca con barra',
-                        series: 4,
-                        reps: '8',
-                        rest: '3min',
-                        observations: 'Controlar la fase excéntrica, pausa de 1 segundo en el pecho',
-                        createdAt: '2024-01-01T12:00:00.000Z'
-                    }
-                },
-                ExerciseTracking: {
-                    type: 'object',
-                    properties: {
-                        id: {
-                            type: 'string',
-                            format: 'uuid',
-                            example: '990e8400-e29b-41d4-a716-446655440004'
-                        },
-                        exerciseId: {
-                            type: 'string',
-                            format: 'uuid',
-                            example: '880e8400-e29b-41d4-a716-446655440003'
-                        },
-                        userId: {
-                            type: 'string',
-                            format: 'uuid',
-                            example: '123e4567-e89b-12d3-a456-426614174000'
-                        },
-                        kg: {
-                            type: 'string',
-                            nullable: true,
-                            description: 'Peso utilizado',
-                            example: '80'
+                            enum: ['pending', 'in_progress', 'completed'],
+                            description: 'Estado del ejercicio',
+                            example: 'pending'
                         },
                         pse: {
                             type: 'string',
                             nullable: true,
-                            description: 'Esfuerzo percibido (PSE)',
+                            description: 'Esfuerzo percibido 1-10 (PSE)',
                             example: '8'
                         },
                         rir: {
@@ -312,24 +376,44 @@ const options = {
                         },
                         done: {
                             type: 'boolean',
-                            description: 'Estado de completado',
-                            example: true
+                            description: 'Ejercicio completado por el usuario',
+                            example: false
+                        },
+                        completedAt: {
+                            type: 'string',
+                            format: 'date-time',
+                            nullable: true,
+                            description: 'Fecha de completado',
+                            example: null
                         },
                         createdAt: {
                             type: 'string',
                             format: 'date-time',
                             example: '2024-01-01T12:00:00.000Z'
+                        },
+                        link: {
+                            type: 'string',
+                            nullable: true,
+                            description: 'Enlace de referencia para el ejercicio (video, imagen, etc.)',
+                            example: 'https://www.youtube.com/watch?v=ejemplo-press-banca'
                         }
                     },
                     example: {
-                        id: '990e8400-e29b-41d4-a716-446655440004',
-                        exerciseId: '880e8400-e29b-41d4-a716-446655440003',
-                        userId: '123e4567-e89b-12d3-a456-426614174000',
-                        kg: '80',
+                        id: '880e8400-e29b-41d4-a716-446655440003',
+                        blockId: '770e8400-e29b-41d4-a716-446655440002',
+                        exerciseName: 'Press de banca con barra',
+                        series: 4,
+                        reps: '8',
+                        kg: 85.5,
+                        rest: '3min',
+                        observations: 'Excelente progreso, técnica perfecta',
+                        status: 'completed',
                         pse: '8',
                         rir: '2',
                         done: true,
-                        createdAt: '2024-01-01T12:00:00.000Z'
+                        completedAt: '2024-01-08T15:30:00.000Z',
+                        createdAt: '2024-01-01T12:00:00.000Z',
+                        link: 'https://www.youtube.com/watch?v=ejemplo-press-banca'
                     }
                 },
                 UserInvitation: {
@@ -502,91 +586,268 @@ const options = {
                         },
                         title: {
                             type: 'string',
-                            example: 'Plan de Hipertrofia - Semana 2'
+                            example: 'Plan de Hipertrofia - Febrero 2024'
                         },
                         description: {
                             type: 'string',
                             nullable: true,
-                            example: 'Segundo plan enfocado en hipertrofia muscular con mayor volumen'
+                            example: 'Plan enfocado en hipertrofia muscular con mayor volumen'
                         }
                     },
                     example: {
                         userId: '123e4567-e89b-12d3-a456-426614174000',
-                        title: 'Plan de Hipertrofia - Semana 2',
-                        description: 'Segundo plan enfocado en hipertrofia muscular con mayor volumen'
+                        title: 'Plan de Hipertrofia - Febrero 2024',
+                        description: 'Plan enfocado en hipertrofia muscular con mayor volumen'
                     }
                 },
-                CreateTrackingRequest: {
+                CreateWeekRequest: {
                     type: 'object',
-                    required: ['exerciseId', 'userId'],
+                    required: ['planId', 'title'],
                     properties: {
-                        exerciseId: {
+                        planId: {
                             type: 'string',
                             format: 'uuid',
-                            example: '880e8400-e29b-41d4-a716-446655440003'
+                            description: 'ID del plan al que pertenece la semana',
+                            example: '550e8400-e29b-41d4-a716-446655440000'
                         },
-                        userId: {
+                        title: {
+                            type: 'string',
+                            description: 'Título de la semana',
+                            example: 'Semana 2 - Progresión'
+                        }
+                    },
+                    examples: {
+                        semana_adaptacion: {
+                            summary: 'Semana de adaptación',
+                            value: {
+                                planId: '550e8400-e29b-41d4-a716-446655440000',
+                                title: 'Semana 1 - Adaptación'
+                            }
+                        },
+                        semana_progresion: {
+                            summary: 'Semana de progresión',
+                            value: {
+                                planId: '550e8400-e29b-41d4-a716-446655440000',
+                                title: 'Semana 2 - Progresión'
+                            }
+                        },
+                        semana_especializacion: {
+                            summary: 'Semana de especialización',
+                            value: {
+                                planId: '550e8400-e29b-41d4-a716-446655440000',
+                                title: 'Semana 3 - Especialización'
+                            }
+                        }
+                    },
+                    example: {
+                        planId: '550e8400-e29b-41d4-a716-446655440000',
+                        title: 'Semana 2 - Progresión'
+                    }
+                },
+                UpdatePlanRequest: {
+                    type: 'object',
+                    properties: {
+                        title: {
+                            type: 'string',
+                            minLength: 1,
+                            description: 'Nuevo título del plan (opcional)',
+                            example: 'Plan de Fuerza Avanzado - Semana 3'
+                        },
+                        description: {
+                            type: 'string',
+                            nullable: true,
+                            description: 'Nueva descripción del plan (opcional)',
+                            example: 'Plan avanzado enfocado en fuerza máxima con ejercicios compuestos y progresión lineal'
+                        }
+                    },
+                    example: {
+                        title: 'Plan de Fuerza Avanzado - Semana 3',
+                        description: 'Plan avanzado enfocado en fuerza máxima con ejercicios compuestos y progresión lineal'
+                    }
+                },
+                CreateSessionRequest: {
+                    type: 'object',
+                    required: ['weekId', 'sessionNumber', 'name'],
+                    properties: {
+                        weekId: {
                             type: 'string',
                             format: 'uuid',
-                            example: '123e4567-e89b-12d3-a456-426614174000'
+                            description: 'ID de la semana a la que pertenece la sesión',
+                            example: '650e8400-e29b-41d4-a716-446655440001'
+                        },
+                        sessionNumber: {
+                            type: 'integer',
+                            minimum: 1,
+                            maximum: 5,
+                            description: 'Número de sesión dentro de la semana (1-5)',
+                            example: 1
+                        },
+                        name: {
+                            type: 'string',
+                            description: 'Nombre descriptivo de la sesión',
+                            example: 'Día 1 - Tren Superior'
+                        }
+                    },
+                    examples: {
+                        tren_superior: {
+                            summary: 'Sesión de tren superior',
+                            value: {
+                                weekId: '650e8400-e29b-41d4-a716-446655440001',
+                                sessionNumber: 1,
+                                name: 'Día 1 - Tren Superior'
+                            }
+                        },
+                        tren_inferior: {
+                            summary: 'Sesión de tren inferior',
+                            value: {
+                                weekId: '650e8400-e29b-41d4-a716-446655440001',
+                                sessionNumber: 2,
+                                name: 'Día 2 - Tren Inferior'
+                            }
+                        },
+                        fullbody: {
+                            summary: 'Sesión fullbody',
+                            value: {
+                                weekId: '650e8400-e29b-41d4-a716-446655440001',
+                                sessionNumber: 3,
+                                name: 'Día 3 - Fullbody'
+                            }
+                        },
+                        cardio: {
+                            summary: 'Sesión de cardio',
+                            value: {
+                                weekId: '650e8400-e29b-41d4-a716-446655440001',
+                                sessionNumber: 4,
+                                name: 'Día 4 - Cardio HIIT'
+                            }
+                        }
+                    },
+                    example: {
+                        weekId: '650e8400-e29b-41d4-a716-446655440001',
+                        sessionNumber: 1,
+                        name: 'Día 1 - Tren Superior'
+                    }
+                },
+                CreateBlockRequest: {
+                    type: 'object',
+                    required: ['sessionId', 'title', 'position'],
+                    properties: {
+                        sessionId: {
+                            type: 'string',
+                            format: 'uuid',
+                            example: '660e8400-e29b-41d4-a716-446655440001'
+                        },
+                        title: {
+                            type: 'string',
+                            example: 'Bloque A - Ejercicios principales'
+                        },
+                        position: {
+                            type: 'integer',
+                            minimum: 1,
+                            example: 1
+                        },
+                        status: {
+                            type: 'string',
+                            description: 'Estado del bloque (pending, in_progress, completed)',
+                            example: 'pending'
+                        }
+                    },
+                    example: {
+                        sessionId: '660e8400-e29b-41d4-a716-446655440001',
+                        title: 'Bloque A - Ejercicios principales',
+                        position: 1,
+                        status: 'pending'
+                    }
+                },
+                UpdateBlockRequest: {
+                    type: 'object',
+                    properties: {
+                        title: {
+                            type: 'string',
+                            minLength: 1,
+                            description: 'Nuevo título del bloque (opcional)',
+                            example: 'Bloque A Modificado - Ejercicios principales'
+                        },
+                        position: {
+                            type: 'integer',
+                            minimum: 1,
+                            description: 'Nueva posición del bloque (opcional)',
+                            example: 2
+                        },
+                        status: {
+                            type: 'string',
+                            enum: ['pending', 'in_progress', 'completed'],
+                            description: 'Nuevo estado del bloque (opcional)',
+                            example: 'in_progress'
+                        }
+                    },
+                    example: {
+                        title: 'Bloque A Modificado - Ejercicios principales',
+                        position: 2,
+                        status: 'in_progress'
+                    }
+                },
+                CreateExerciseRequest: {
+                    type: 'object',
+                    required: ['blockId', 'exerciseName', 'series', 'reps'],
+                    properties: {
+                        blockId: {
+                            type: 'string',
+                            format: 'uuid',
+                            example: '770e8400-e29b-41d4-a716-446655440002'
+                        },
+                        exerciseName: {
+                            type: 'string',
+                            example: 'Press de Banca'
+                        },
+                        series: {
+                            type: 'integer',
+                            minimum: 1,
+                            example: 4
+                        },
+                        reps: {
+                            type: 'string',
+                            example: '8-10'
                         },
                         kg: {
-                            type: 'string',
+                            type: 'number',
                             nullable: true,
-                            example: '85'
+                            example: 80.5
                         },
-                        pse: {
+                        rest: {
                             type: 'string',
                             nullable: true,
-                            example: '7'
+                            example: '2-3 min'
                         },
-                        rir: {
+                        observations: {
                             type: 'string',
                             nullable: true,
-                            example: '3'
+                            example: 'Mantener control en la fase excéntrica'
+                        },
+                        status: {
+                            type: 'string',
+                            description: 'Estado del ejercicio (pending, in_progress, completed)',
+                            example: 'pending'
+                        },
+                        link: {
+                            type: 'string',
+                            nullable: true,
+                            description: 'Enlace de referencia para el ejercicio (video, imagen, etc.)',
+                            example: 'https://www.youtube.com/watch?v=ejemplo-press-banca'
                         }
                     },
                     example: {
-                        exerciseId: '880e8400-e29b-41d4-a716-446655440003',
-                        userId: '123e4567-e89b-12d3-a456-426614174000',
-                        kg: '85',
-                        pse: '7',
-                        rir: '3'
+                        blockId: '770e8400-e29b-41d4-a716-446655440002',
+                        exerciseName: 'Press de Banca',
+                        series: 4,
+                        reps: '8-10',
+                        kg: 80.5,
+                        rest: '2-3 min',
+                        observations: 'Mantener control en la fase excéntrica',
+                        status: 'pending',
+                        link: 'https://www.youtube.com/watch?v=ejemplo-press-banca'
                     }
                 },
-                UserStatsResponse: {
-                    type: 'object',
-                    properties: {
-                        totalPlans: {
-                            type: 'integer',
-                            example: 3
-                        },
-                        completedSessions: {
-                            type: 'integer',
-                            example: 8
-                        },
-                        totalExerciseTracking: {
-                            type: 'integer',
-                            example: 45
-                        },
-                        completedExercises: {
-                            type: 'integer',
-                            example: 38
-                        },
-                        progressPercentage: {
-                            type: 'number',
-                            format: 'float',
-                            example: 84.4
-                        }
-                    },
-                    example: {
-                        totalPlans: 3,
-                        completedSessions: 8,
-                        totalExerciseTracking: 45,
-                        completedExercises: 38,
-                        progressPercentage: 84.4
-                    }
-                }
             }
         },
         tags: [
@@ -611,6 +872,10 @@ const options = {
                 description: 'Gestión de planes de entrenamiento'
             },
             {
+                name: 'Weeks',
+                description: 'Gestión de semanas dentro de los planes'
+            },
+            {
                 name: 'Sessions',
                 description: 'Gestión de sesiones de entrenamiento'
             },
@@ -620,15 +885,7 @@ const options = {
             },
             {
                 name: 'Exercises',
-                description: 'Gestión de ejercicios'
-            },
-            {
-                name: 'Tracking',
-                description: 'Seguimiento de ejercicios'
-            },
-            {
-                name: 'Statistics',
-                description: 'Estadísticas y reportes'
+                description: 'Gestión de ejercicios (con tracking integrado)'
             },
             {
                 name: 'Admin',

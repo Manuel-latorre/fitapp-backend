@@ -40,8 +40,7 @@ class UserController {
                     },
                     _count: {
                         select: {
-                            plans: true,
-                            exerciseTracking: true
+                            plans: true
                         }
                     }
                 }
@@ -64,11 +63,15 @@ class UserController {
                 include: {
                     plans: {
                         include: {
-                            sessions: {
+                            weeks: {
                                 include: {
-                                    blocks: {
+                                    sessions: {
                                         include: {
-                                            exercises: true
+                                            blocks: {
+                                                include: {
+                                                    exercises: true
+                                                }
+                                            }
                                         }
                                     }
                                 }
@@ -77,8 +80,7 @@ class UserController {
                     },
                     _count: {
                         select: {
-                            plans: true,
-                            exerciseTracking: true
+                            plans: true
                         }
                     }
                 }
@@ -183,15 +185,21 @@ class UserController {
                 include: {
                     plans: {
                         include: {
-                            sessions: {
+                            weeks: {
                                 include: {
-                                    _count: {
-                                        select: {
-                                            blocks: true
-                                        }
+                                    sessions: {
+                                        include: {
+                                            blocks: {
+                                                include: {
+                                                    exercises: true
+                                                },
+                                                orderBy: { position: 'asc' }
+                                            }
+                                        },
+                                        orderBy: { sessionNumber: 'asc' }
                                     }
                                 },
-                                orderBy: { sessionNumber: 'asc' }
+                                orderBy: { createdAt: 'asc' }
                             }
                         },
                         orderBy: { createdAt: 'desc' }

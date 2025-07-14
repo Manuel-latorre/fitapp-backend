@@ -16,15 +16,28 @@ const updatePlanSchema = z.object({
 });
 
 const createSessionSchema = z.object({
-  planId: z.string().uuid('Invalid plan ID'),
+  weekId: z.string().uuid('Invalid week ID'),
   sessionNumber: z.number().int().min(1).max(5),
   name: z.string().min(1, 'Session name is required')
+});
+
+const updateSessionSchema = z.object({
+  sessionNumber: z.number().int().min(1).max(5).optional(),
+  name: z.string().min(1, 'Session name is required').optional(),
+  completed: z.boolean().optional()
 });
 
 const createBlockSchema = z.object({
   sessionId: z.string().uuid('Invalid session ID'),
   title: z.string().min(1, 'Block title is required'),
-  position: z.number().int().min(1)
+  position: z.number().int().min(1),
+  status: z.string().optional().default('pending')
+});
+
+const updateBlockSchema = z.object({
+  title: z.string().min(1).optional(),
+  position: z.number().int().min(1).optional(),
+  status: z.string().optional()
 });
 
 const createExerciseSchema = z.object({
@@ -32,8 +45,26 @@ const createExerciseSchema = z.object({
   exerciseName: z.string().min(1, 'Exercise name is required'),
   series: z.number().int().min(1),
   reps: z.string().min(1, 'Reps specification is required'),
+  kg: z.number().optional(),
   rest: z.string().optional(),
-  observations: z.string().optional()
+  observations: z.string().optional(),
+  status: z.string().optional().default('pending'),
+  link: z.string().optional()
+});
+
+const updateExerciseSchema = z.object({
+  exerciseName: z.string().min(1).optional(),
+  series: z.number().int().min(1).optional(),
+  reps: z.string().min(1).optional(),
+  kg: z.number().optional(),
+  rest: z.string().optional(),
+  observations: z.string().optional(),
+  status: z.string().optional(),
+  pse: z.string().optional(),
+  rir: z.string().optional(),
+  done: z.boolean().optional(),
+  completedAt: z.date().optional().nullable(),
+  link: z.string().optional()
 });
 
 export class PlanController {
@@ -49,15 +80,21 @@ export class PlanController {
               email: true
             }
           },
-          sessions: {
+          weeks: {
             include: {
-              _count: {
-                select: {
-                  blocks: true
-                }
+              sessions: {
+                include: {
+                  blocks: {
+                    include: {
+                      exercises: true
+                    },
+                    orderBy: { position: 'asc' }
+                  }
+                },
+                orderBy: { sessionNumber: 'asc' }
               }
             },
-            orderBy: { sessionNumber: 'asc' }
+            orderBy: { createdAt: 'asc' }
           }
         },
         orderBy: { createdAt: 'desc' }
@@ -87,20 +124,21 @@ export class PlanController {
               email: true
             }
           },
-          sessions: {
+          weeks: {
             include: {
-              blocks: {
+              sessions: {
                 include: {
-                  exercises: {
+                  blocks: {
                     include: {
-                      tracking: true
-                    }
+                      exercises: true
+                    },
+                    orderBy: { position: 'asc' }
                   }
                 },
-                orderBy: { position: 'asc' }
+                orderBy: { sessionNumber: 'asc' }
               }
             },
-            orderBy: { sessionNumber: 'asc' }
+            orderBy: { createdAt: 'asc' }
           }
         }
       });
@@ -216,25 +254,25 @@ export class PlanController {
 
       const sessionData = validation.data;
 
-      // Verificar que el plan existe
-      const plan = await prisma.plan.findUnique({
-        where: { id: sessionData.planId }
+      // Verificar que la semana existe
+      const week = await prisma.week.findUnique({
+        where: { id: sessionData.weekId }
       });
 
-      if (!plan) {
-        throw createError('Plan not found', 404);
+      if (!week) {
+        throw createError('Week not found', 404);
       }
 
       // Verificar que no existe ya una sesión con el mismo número
       const existingSession = await prisma.planSession.findFirst({
         where: {
-          planId: sessionData.planId,
+          weekId: sessionData.weekId,
           sessionNumber: sessionData.sessionNumber
         }
       });
 
       if (existingSession) {
-        throw createError('Session number already exists for this plan', 409);
+        throw createError('Session number already exists for this week', 409);
       }
 
       const session = await prisma.planSession.create({
@@ -271,7 +309,10 @@ export class PlanController {
       }
 
       const block = await prisma.sessionBlock.create({
-        data: blockData
+        data: {
+          ...blockData,
+          status: blockData.status || 'pending'
+        }
       });
 
       res.status(201).json({ 
@@ -304,12 +345,190 @@ export class PlanController {
       }
 
       const exercise = await prisma.blockExercise.create({
-        data: exerciseData
+        data: {
+          ...exerciseData,
+          status: exerciseData.status || 'pending'
+        }
       });
 
       res.status(201).json({ 
         message: 'Exercise created successfully',
         exercise 
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  // Actualizar ejercicio
+  static async updateExercise(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { id } = req.params;
+      const validation = updateExerciseSchema.safeParse(req.body);
+
+      if (!validation.success) {
+        throw createError('Invalid input data', 400);
+      }
+
+      const { done, ...otherData } = validation.data;
+
+      // Construir objeto de actualización
+      const updateData: any = { ...otherData };
+
+      // Si se marca como done=true, establecer completedAt
+      if (done === true) {
+        updateData.done = true;
+        updateData.completedAt = new Date();
+      } else if (done === false) {
+        updateData.done = false;
+        updateData.completedAt = null;
+      }
+
+      const exercise = await prisma.blockExercise.update({
+        where: { id },
+        data: updateData,
+        include: {
+          block: {
+            include: {
+              session: {
+                select: {
+                  id: true,
+                  name: true,
+                  sessionNumber: true
+                }
+              }
+            }
+          }
+        }
+      });
+
+      res.json({ 
+        message: 'Exercise updated successfully',
+        exercise 
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  // Eliminar ejercicio
+  static async deleteExercise(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { id } = req.params;
+
+      await prisma.blockExercise.delete({
+        where: { id }
+      });
+
+      res.json({ message: 'Exercise deleted successfully' });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  // Actualizar bloque
+  static async updateBlock(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { id } = req.params;
+      const validation = updateBlockSchema.safeParse(req.body);
+
+      if (!validation.success) {
+        throw createError('Invalid input data', 400);
+      }
+
+      const block = await prisma.sessionBlock.update({
+        where: { id },
+        data: validation.data,
+        include: {
+          session: {
+            select: {
+              id: true,
+              name: true,
+              sessionNumber: true
+            }
+          }
+        }
+      });
+
+      res.json({ 
+        message: 'Block updated successfully',
+        block 
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  // Eliminar bloque
+  static async deleteBlock(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { id } = req.params;
+
+      await prisma.sessionBlock.delete({
+        where: { id }
+      });
+
+      res.json({ message: 'Block deleted successfully' });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  // Actualizar sesión
+  static async updateSession(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { id } = req.params;
+      const validation = updateSessionSchema.safeParse(req.body);
+
+      if (!validation.success) {
+        throw createError('Invalid input data', 400);
+      }
+
+      const updateData = validation.data;
+
+      // Si se quiere cambiar el número de sesión, verificar que no exista ya
+      if (updateData.sessionNumber !== undefined) {
+        // Obtener la sesión actual para conocer su weekId
+        const currentSession = await prisma.planSession.findUnique({
+          where: { id },
+          select: { weekId: true }
+        });
+
+        if (!currentSession) {
+          throw createError('Session not found', 404);
+        }
+
+        // Verificar que no exista otra sesión con el mismo número en la misma semana
+        const existingSession = await prisma.planSession.findFirst({
+          where: {
+            sessionNumber: updateData.sessionNumber,
+            weekId: currentSession.weekId,
+            id: { not: id }
+          }
+        });
+
+        if (existingSession) {
+          throw createError('Session number already exists for this week', 409);
+        }
+      }
+
+      const session = await prisma.planSession.update({
+        where: { id },
+        data: updateData,
+        include: {
+          week: {
+            select: {
+              id: true,
+              title: true,
+              planId: true
+            }
+          }
+        }
+      });
+
+      res.json({ 
+        message: 'Session updated successfully',
+        session 
       });
     } catch (error) {
       next(error);

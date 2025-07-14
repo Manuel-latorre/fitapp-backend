@@ -173,8 +173,7 @@ export class AuthController {
           },
           _count: {
             select: {
-              plans: true,
-              exerciseTracking: true
+              plans: true
             }
           }
         }
@@ -195,8 +194,7 @@ export class AuthController {
           createdAt: user.createdAt,
           plans: user.plans,
           stats: {
-            totalPlans: user._count.plans,
-            totalTracking: user._count.exerciseTracking
+            totalPlans: user._count.plans
           }
         }
       });

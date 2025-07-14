@@ -2,7 +2,7 @@ import { Router, Request, Response, NextFunction } from 'express'
 import bcrypt from 'bcrypt'
 import { UserController } from '../controllers/userController'
 import { PlanController } from '../controllers/planController'
-import { TrackingController } from '../controllers/trackingController'
+import { WeekController } from '../controllers/weekController'
 import { AuthController } from '../controllers/authController'
 import { InvitationController } from '../controllers/invitationController'
 import { authMiddleware, requireAdmin } from '../middlewares/auth'
@@ -43,8 +43,8 @@ router.get('/', (req: Request, res: Response, next: NextFunction) => {
       invitations: 'POST /invitations/invite (admin), GET /invitations/verify/:token, POST /invitations/complete',
       users: 'GET/POST /users, GET/PUT/DELETE /users/:id',
       plans: 'GET/POST /plans, GET/PUT/DELETE /plans/:id',
-      tracking: 'GET/POST /tracking, GET/PUT/DELETE /tracking/:id',
-      stats: 'GET /users/:userId/stats'
+      weeks: 'GET /plans/:planId/weeks, POST /weeks, GET/PUT/DELETE /weeks/:id',
+      exercises: 'POST /exercises, PUT/DELETE /exercises/:id (tracking integrado)'
     }
   })
 })
@@ -596,9 +596,116 @@ router.post('/invitations/complete', InvitationController.completeRegistration)
  *       403:
  *         description: Permisos insuficientes
  */
+/**
+ * @swagger
+ * /invitations/pending:
+ *   get:
+ *     summary: Obtener invitaciones pendientes
+ *     tags: [Invitations]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Lista de invitaciones pendientes
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/UserInvitation'
+ *       401:
+ *         description: No autorizado (requiere admin)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
 router.get('/invitations/pending', authMiddleware, requireAdmin, InvitationController.getPendingInvitations)
 
+/**
+ * @swagger
+ * /invitations/{id}:
+ *   delete:
+ *     summary: Cancelar invitación
+ *     tags: [Invitations]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         example: "aa0e8400-e29b-41d4-a716-446655440005"
+ *     responses:
+ *       200:
+ *         description: Invitación cancelada exitosamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: "Invitación cancelada exitosamente"
+ *       404:
+ *         description: Invitación no encontrada
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       401:
+ *         description: No autorizado (requiere admin)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
 router.delete('/invitations/:id', authMiddleware, requireAdmin, InvitationController.cancelInvitation)
+
+/**
+ * @swagger
+ * /invitations/{id}/resend:
+ *   post:
+ *     summary: Reenviar invitación
+ *     tags: [Invitations]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         example: "aa0e8400-e29b-41d4-a716-446655440005"
+ *     responses:
+ *       200:
+ *         description: Invitación reenviada exitosamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: "Invitación reenviada exitosamente"
+ *                 invitation:
+ *                   $ref: '#/components/schemas/UserInvitation'
+ *       404:
+ *         description: Invitación no encontrada
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       401:
+ *         description: No autorizado (requiere admin)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
 router.post('/invitations/:id/resend', authMiddleware, requireAdmin, InvitationController.resendInvitation)
 
 // ===== RUTAS DE USUARIOS =====
@@ -752,6 +859,15 @@ router.delete('/users/:id', UserController.deleteUser)
  * /users/{id}/plans:
  *   get:
  *     summary: Obtener planes de un usuario
+ *     description: |
+ *       Obtiene todos los planes de entrenamiento asociados a un usuario específico.
+ *       Incluye información completa de cada plan con sus sesiones, bloques y ejercicios.
+ *       
+ *       **Características:**
+ *       - Planes ordenados por fecha de creación (más recientes primero)
+ *       - Sesiones ordenadas por número de sesión
+ *       - Bloques ordenados por posición
+ *       - Incluye información completa de ejercicios con tracking
  *     tags: [Users]
  *     security:
  *       - bearerAuth: []
@@ -762,9 +878,298 @@ router.delete('/users/:id', UserController.deleteUser)
  *         schema:
  *           type: string
  *           format: uuid
+ *         description: ID del usuario
+ *         example: "123e4567-e89b-12d3-a456-426614174000"
  *     responses:
  *       200:
- *         description: Planes del usuario
+ *         description: Planes del usuario obtenidos exitosamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 userId:
+ *                   type: string
+ *                   format: uuid
+ *                 userName:
+ *                   type: string
+ *                 plans:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: string
+ *                         format: uuid
+ *                       userId:
+ *                         type: string
+ *                         format: uuid
+ *                       title:
+ *                         type: string
+ *                       description:
+ *                         type: string
+ *                         nullable: true
+ *                       createdAt:
+ *                         type: string
+ *                         format: date-time
+ *                       sessions:
+ *                         type: array
+ *                         items:
+ *                           type: object
+ *                           properties:
+ *                             id:
+ *                               type: string
+ *                               format: uuid
+ *                             sessionNumber:
+ *                               type: integer
+ *                             name:
+ *                               type: string
+ *                             completed:
+ *                               type: boolean
+ *                             blocks:
+ *                               type: array
+ *                               items:
+ *                                 type: object
+ *                                 properties:
+ *                                   id:
+ *                                     type: string
+ *                                     format: uuid
+ *                                   title:
+ *                                     type: string
+ *                                   position:
+ *                                     type: integer
+ *                                   status:
+ *                                     type: string
+ *                                   exercises:
+ *                                     type: array
+ *                                     items:
+ *                                       type: object
+ *                                       properties:
+ *                                         id:
+ *                                           type: string
+ *                                           format: uuid
+ *                                         exerciseName:
+ *                                           type: string
+ *                                         series:
+ *                                           type: integer
+ *                                         reps:
+ *                                           type: string
+ *                                         kg:
+ *                                           type: number
+ *                                           nullable: true
+ *                                         rest:
+ *                                           type: string
+ *                                           nullable: true
+ *                                         observations:
+ *                                           type: string
+ *                                           nullable: true
+ *                                         status:
+ *                                           type: string
+ *                                         pse:
+ *                                           type: string
+ *                                           nullable: true
+ *                                         rir:
+ *                                           type: string
+ *                                           nullable: true
+ *                                         done:
+ *                                           type: boolean
+ *                                         completedAt:
+ *                                           type: string
+ *                                           format: date-time
+ *                                           nullable: true
+ *             examples:
+ *               usuario_con_planes:
+ *                 summary: Usuario con múltiples planes
+ *                 value:
+ *                   userId: "123e4567-e89b-12d3-a456-426614174000"
+ *                   userName: "Juan Pérez"
+ *                   plans:
+ *                     - id: "550e8400-e29b-41d4-a716-446655440000"
+ *                       userId: "123e4567-e89b-12d3-a456-426614174000"
+ *                       title: "Plan de Fuerza - Semana 1"
+ *                       description: "Plan enfocado en desarrollo de fuerza básica con ejercicios compuestos"
+ *                       createdAt: "2024-01-15T10:30:00.000Z"
+ *                       sessions:
+ *                         - id: "660e8400-e29b-41d4-a716-446655440001"
+ *                           sessionNumber: 1
+ *                           name: "Tren Superior"
+ *                           completed: false
+ *                           blocks:
+ *                             - id: "770e8400-e29b-41d4-a716-446655440002"
+ *                               title: "Calentamiento"
+ *                               position: 1
+ *                               status: "pending"
+ *                               exercises:
+ *                                 - id: "880e8400-e29b-41d4-a716-446655440003"
+ *                                   exerciseName: "Movilidad de hombros"
+ *                                   series: 2
+ *                                   reps: "10-15"
+ *                                   kg: null
+ *                                   rest: "30s"
+ *                                   observations: "Movimientos controlados"
+ *                                   status: "pending"
+ *                                   pse: null
+ *                                   rir: null
+ *                                   done: false
+ *                                   completedAt: null
+ *                             - id: "770e8400-e29b-41d4-a716-446655440004"
+ *                               title: "Ejercicios Principales"
+ *                               position: 2
+ *                               status: "pending"
+ *                               exercises:
+ *                                 - id: "880e8400-e29b-41d4-a716-446655440005"
+ *                                   exerciseName: "Press de Banca"
+ *                                   series: 4
+ *                                   reps: "6-8"
+ *                                   kg: 80
+ *                                   rest: "3min"
+ *                                   observations: "Controlar la fase excéntrica"
+ *                                   status: "completed"
+ *                                   pse: "7"
+ *                                   rir: "2"
+ *                                   done: true
+ *                                   completedAt: "2024-01-15T11:45:00.000Z"
+ *                                 - id: "880e8400-e29b-41d4-a716-446655440006"
+ *                                   exerciseName: "Remo con Barra"
+ *                                   series: 4
+ *                                   reps: "8-10"
+ *                                   kg: 70
+ *                                   rest: "2min"
+ *                                   observations: "Mantener la espalda recta"
+ *                                   status: "pending"
+ *                                   pse: null
+ *                                   rir: null
+ *                                   done: false
+ *                                   completedAt: null
+ *                         - id: "660e8400-e29b-41d4-a716-446655440007"
+ *                           sessionNumber: 2
+ *                           name: "Tren Inferior"
+ *                           completed: false
+ *                           blocks:
+ *                             - id: "770e8400-e29b-41d4-a716-446655440008"
+ *                               title: "Ejercicios Principales"
+ *                               position: 1
+ *                               status: "pending"
+ *                               exercises:
+ *                                 - id: "880e8400-e29b-41d4-a716-446655440009"
+ *                                   exerciseName: "Sentadilla"
+ *                                   series: 4
+ *                                   reps: "8-12"
+ *                                   kg: 100
+ *                                   rest: "3min"
+ *                                   observations: "Profundidad completa"
+ *                                   status: "pending"
+ *                                   pse: null
+ *                                   rir: null
+ *                                   done: false
+ *                                   completedAt: null
+ *                     - id: "551e8400-e29b-41d4-a716-446655440010"
+ *                       userId: "123e4567-e89b-12d3-a456-426614174000"
+ *                       title: "Plan de Hipertrofia - Semana 2"
+ *                       description: "Plan enfocado en hipertrofia muscular con mayor volumen"
+ *                       createdAt: "2024-01-10T09:00:00.000Z"
+ *                       sessions:
+ *                         - id: "660e8400-e29b-41d4-a716-446655440011"
+ *                           sessionNumber: 1
+ *                           name: "Push"
+ *                           completed: true
+ *                           blocks:
+ *                             - id: "770e8400-e29b-41d4-a716-446655440012"
+ *                               title: "Pectorales"
+ *                               position: 1
+ *                               status: "completed"
+ *                               exercises:
+ *                                 - id: "880e8400-e29b-41d4-a716-446655440013"
+ *                                   exerciseName: "Press Inclinado"
+ *                                   series: 3
+ *                                   reps: "10-12"
+ *                                   kg: 65
+ *                                   rest: "90s"
+ *                                   observations: "Buen rango de movimiento"
+ *                                   status: "completed"
+ *                                   pse: "8"
+ *                                   rir: "1"
+ *                                   done: true
+ *                                   completedAt: "2024-01-10T10:30:00.000Z"
+ *               usuario_sin_planes:
+ *                 summary: Usuario sin planes asignados
+ *                 value:
+ *                   userId: "dd0e8400-e29b-41d4-a716-446655440008"
+ *                   userName: "María García"
+ *                   plans: []
+ *               usuario_plan_simple:
+ *                 summary: Usuario con un plan básico
+ *                 value:
+ *                   userId: "99fe8400-e29b-41d4-a716-446655440009"
+ *                   userName: "Carlos Rodriguez"
+ *                   plans:
+ *                     - id: "552e8400-e29b-41d4-a716-446655440014"
+ *                       userId: "99fe8400-e29b-41d4-a716-446655440009"
+ *                       title: "Plan de Iniciación"
+ *                       description: "Plan básico para principiantes"
+ *                       createdAt: "2024-01-12T14:00:00.000Z"
+ *                       sessions:
+ *                         - id: "660e8400-e29b-41d4-a716-446655440015"
+ *                           sessionNumber: 1
+ *                           name: "Cuerpo Completo"
+ *                           completed: false
+ *                           blocks:
+ *                             - id: "770e8400-e29b-41d4-a716-446655440016"
+ *                               title: "Ejercicios Básicos"
+ *                               position: 1
+ *                               status: "pending"
+ *                               exercises:
+ *                                 - id: "880e8400-e29b-41d4-a716-446655440017"
+ *                                   exerciseName: "Flexiones"
+ *                                   series: 3
+ *                                   reps: "8-12"
+ *                                   kg: null
+ *                                   rest: "60s"
+ *                                   observations: "Mantener el core activo"
+ *                                   status: "pending"
+ *                                   pse: null
+ *                                   rir: null
+ *                                   done: false
+ *                                   completedAt: null
+ *       404:
+ *         description: Usuario no encontrado
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ *                 message:
+ *                   type: string
+ *                 details:
+ *                   type: array
+ *                   items:
+ *                     type: string
+ *             examples:
+ *               usuario_no_encontrado:
+ *                 summary: Usuario no existe
+ *                 value:
+ *                   error: "NotFound"
+ *                   message: "User not found"
+ *                   details: []
+ *       401:
+ *         description: No autenticado
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ *                 message:
+ *                   type: string
+ *             examples:
+ *               no_autenticado:
+ *                 summary: Token no válido
+ *                 value:
+ *                   error: "Unauthorized"
+ *                   message: "Invalid or expired token"
  */
 router.get('/users/:id/plans', UserController.getUserPlans)
 
@@ -875,6 +1280,7 @@ router.post('/plans', PlanController.createPlan)
  *         description: Detalles del plan con sesiones, bloques y ejercicios
  *   put:
  *     summary: Actualizar plan
+ *     description: Actualiza los datos de un plan existente. Permite modificar el título y/o descripción del plan.
  *     tags: [Plans]
  *     security:
  *       - bearerAuth: []
@@ -885,9 +1291,72 @@ router.post('/plans', PlanController.createPlan)
  *         schema:
  *           type: string
  *           format: uuid
+ *         description: ID del plan a actualizar
+ *         example: "550e8400-e29b-41d4-a716-446655440000"
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/UpdatePlanRequest'
+ *           examples:
+ *             actualizar_titulo_descripcion:
+ *               summary: Actualizar título y descripción
+ *               value:
+ *                 title: "Plan de Fuerza Avanzado - Semana 3"
+ *                 description: "Plan avanzado enfocado en fuerza máxima con ejercicios compuestos y progresión lineal"
+ *             actualizar_solo_titulo:
+ *               summary: Actualizar solo el título
+ *               value:
+ *                 title: "Plan de Hipertrofia Modificado"
+ *             actualizar_solo_descripcion:
+ *               summary: Actualizar solo la descripción
+ *               value:
+ *                 description: "Descripción actualizada con nuevos objetivos y metodología"
+ *             limpiar_descripcion:
+ *               summary: Limpiar descripción
+ *               value:
+ *                 title: "Plan Sin Descripción"
+ *                 description: null
  *     responses:
  *       200:
- *         description: Plan actualizado
+ *         description: Plan actualizado exitosamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                 plan:
+ *                   $ref: '#/components/schemas/Plan'
+ *             examples:
+ *               plan_actualizado:
+ *                 summary: Plan actualizado exitosamente
+ *                 value:
+ *                   message: "Plan updated successfully"
+ *                   plan:
+ *                     id: "550e8400-e29b-41d4-a716-446655440000"
+ *                     userId: "123e4567-e89b-12d3-a456-426614174000"
+ *                     title: "Plan de Fuerza Avanzado - Semana 3"
+ *                     description: "Plan avanzado enfocado en fuerza máxima con ejercicios compuestos y progresión lineal"
+ *                     createdAt: "2024-01-01T12:00:00.000Z"
+ *                     user:
+ *                       id: "123e4567-e89b-12d3-a456-426614174000"
+ *                       name: "Juan Pérez"
+ *                       email: "juan.perez@email.com"
+ *       400:
+ *         description: Datos inválidos
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       404:
+ *         description: Plan no encontrado
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  *   delete:
  *     summary: Eliminar plan
  *     tags: [Plans]
@@ -908,58 +1377,72 @@ router.get('/plans/:id', PlanController.getPlanById)
 router.put('/plans/:id', PlanController.updatePlan)
 router.delete('/plans/:id', PlanController.deletePlan)
 
-// ===== RUTAS DE SESIONES =====
-router.post('/sessions', PlanController.createSession)
-router.put('/sessions/:id/complete', PlanController.completeSession)
-
-// ===== RUTAS DE BLOQUES =====
-router.post('/blocks', PlanController.createBlock)
-
-// ===== RUTAS DE EJERCICIOS =====
-router.post('/exercises', PlanController.createExercise)
-
-// ===== RUTAS DE TRACKING =====
+// ===== RUTAS DE WEEKS =====
 
 /**
  * @swagger
- * /tracking:
+ * /plans/{planId}/weeks:
  *   get:
- *     summary: Obtener todos los seguimientos
- *     tags: [Tracking]
+ *     summary: Obtener semanas de un plan
+ *     description: Obtiene todas las semanas asociadas a un plan específico
+ *     tags: [Weeks]
  *     security:
  *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: planId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: ID del plan
+ *         example: "550e8400-e29b-41d4-a716-446655440000"
  *     responses:
  *       200:
- *         description: Lista de seguimientos de ejercicios
+ *         description: Lista de semanas del plan
  *         content:
  *           application/json:
  *             schema:
- *               type: array
- *               items:
- *                 $ref: '#/components/schemas/ExerciseTracking'
+ *               type: object
+ *               properties:
+ *                 weeks:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/Week'
+ *                 total:
+ *                   type: integer
  *             examples:
- *               tracking_list:
- *                 summary: Lista de seguimientos de ejercicios
+ *               weeks_list:
+ *                 summary: Lista de semanas
  *                 value:
- *                   - id: "990e8400-e29b-41d4-a716-446655440004"
- *                     exerciseId: "880e8400-e29b-41d4-a716-446655440003"
- *                     userId: "123e4567-e89b-12d3-a456-426614174000"
- *                     kg: "80"
- *                     pse: "8"
- *                     rir: "2"
- *                     done: true
- *                     createdAt: "2024-01-01T14:00:00.000Z"
- *                   - id: "991e8400-e29b-41d4-a716-446655440005"
- *                     exerciseId: "881e8400-e29b-41d4-a716-446655440004"
- *                     userId: "123e4567-e89b-12d3-a456-426614174000"
- *                     kg: "100"
- *                     pse: "9"
- *                     rir: "1"
- *                     done: true
- *                     createdAt: "2024-01-01T14:30:00.000Z"
+ *                   weeks:
+ *                     - id: "650e8400-e29b-41d4-a716-446655440001"
+ *                       planId: "550e8400-e29b-41d4-a716-446655440000"
+ *                       title: "Semana 1 - Adaptación"
+ *                       createdAt: "2024-01-01T12:00:00.000Z"
+ *                       sessions: []
+ *                     - id: "650e8400-e29b-41d4-a716-446655440002"
+ *                       planId: "550e8400-e29b-41d4-a716-446655440000"
+ *                       title: "Semana 2 - Progresión"
+ *                       createdAt: "2024-01-02T12:00:00.000Z"
+ *                       sessions: []
+ *                   total: 2
+ *       404:
+ *         description: Plan no encontrado
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
+router.get('/plans/:planId/weeks', WeekController.getWeeksByPlan)
+
+/**
+ * @swagger
+ * /weeks:
  *   post:
- *     summary: Crear nuevo seguimiento
- *     tags: [Tracking]
+ *     summary: Crear nueva semana
+ *     description: Crea una nueva semana dentro de un plan existente
+ *     tags: [Weeks]
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -967,35 +1450,21 @@ router.post('/exercises', PlanController.createExercise)
  *       content:
  *         application/json:
  *           schema:
- *             $ref: '#/components/schemas/CreateTrackingRequest'
+ *             $ref: '#/components/schemas/CreateWeekRequest'
  *           examples:
- *             tracking_press_banca:
- *               summary: Seguimiento de press de banca
+ *             semana_adaptacion:
+ *               summary: Semana de adaptación
  *               value:
- *                 exerciseId: "880e8400-e29b-41d4-a716-446655440003"
- *                 userId: "123e4567-e89b-12d3-a456-426614174000"
- *                 kg: "85"
- *                 pse: "7"
- *                 rir: "3"
- *             tracking_sentadilla:
- *               summary: Seguimiento de sentadilla
+ *                 planId: "550e8400-e29b-41d4-a716-446655440000"
+ *                 title: "Semana 1 - Adaptación"
+ *             semana_progresion:
+ *               summary: Semana de progresión
  *               value:
- *                 exerciseId: "881e8400-e29b-41d4-a716-446655440004"
- *                 userId: "123e4567-e89b-12d3-a456-426614174000"
- *                 kg: "120"
- *                 pse: "8"
- *                 rir: "2"
- *             tracking_cardio:
- *               summary: Seguimiento de ejercicio cardiovascular
- *               value:
- *                 exerciseId: "882e8400-e29b-41d4-a716-446655440005"
- *                 userId: "dd0e8400-e29b-41d4-a716-446655440008"
- *                 kg: null
- *                 pse: "6"
- *                 rir: null
+ *                 planId: "550e8400-e29b-41d4-a716-446655440000"
+ *                 title: "Semana 2 - Progresión"
  *     responses:
  *       201:
- *         description: Seguimiento creado exitosamente
+ *         description: Semana creada exitosamente
  *         content:
  *           application/json:
  *             schema:
@@ -1003,140 +1472,1039 @@ router.post('/exercises', PlanController.createExercise)
  *               properties:
  *                 message:
  *                   type: string
- *                 tracking:
- *                   $ref: '#/components/schemas/ExerciseTracking'
+ *                 week:
+ *                   $ref: '#/components/schemas/Week'
  *             examples:
- *               tracking_created:
- *                 summary: Seguimiento creado exitosamente
+ *               week_created:
+ *                 summary: Semana creada exitosamente
  *                 value:
- *                   message: "Seguimiento registrado exitosamente"
- *                   tracking:
- *                     id: "992e8400-e29b-41d4-a716-446655440006"
- *                     exerciseId: "880e8400-e29b-41d4-a716-446655440003"
- *                     userId: "123e4567-e89b-12d3-a456-426614174000"
- *                     kg: "85"
- *                     pse: "7"
- *                     rir: "3"
- *                     done: false
- *                     createdAt: "2024-01-01T15:00:00.000Z"
- */
-router.get('/tracking', TrackingController.getAllTracking)
-router.post('/tracking', TrackingController.createTracking)
-
-/**
- * @swagger
- * /tracking/user/{userId}:
- *   get:
- *     summary: Obtener seguimientos por usuario
- *     tags: [Tracking]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: userId
- *         required: true
- *         schema:
- *           type: string
- *           format: uuid
- *     responses:
- *       200:
- *         description: Seguimientos del usuario
- */
-router.get('/tracking/user/:userId', TrackingController.getTrackingByUser)
-
-/**
- * @swagger
- * /tracking/exercise/{exerciseId}:
- *   get:
- *     summary: Obtener seguimientos por ejercicio
- *     tags: [Tracking]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: exerciseId
- *         required: true
- *         schema:
- *           type: string
- *           format: uuid
- *     responses:
- *       200:
- *         description: Seguimientos del ejercicio
- */
-router.get('/tracking/exercise/:exerciseId', TrackingController.getTrackingByExercise)
-
-router.put('/tracking/:id', TrackingController.updateTracking)
-router.delete('/tracking/:id', TrackingController.deleteTracking)
-router.put('/tracking/:id/done', TrackingController.markAsDone)
-
-// ===== RUTAS DE ESTADÍSTICAS =====
-
-/**
- * @swagger
- * /users/{userId}/stats:
- *   get:
- *     summary: Obtener estadísticas de usuario
- *     tags: [Statistics]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: userId
- *         required: true
- *         schema:
- *           type: string
- *           format: uuid
- *         example: "123e4567-e89b-12d3-a456-426614174000"
- *     responses:
- *       200:
- *         description: Estadísticas del usuario
+ *                   message: "Week created successfully"
+ *                   week:
+ *                     id: "650e8400-e29b-41d4-a716-446655440001"
+ *                     planId: "550e8400-e29b-41d4-a716-446655440000"
+ *                     title: "Semana 1 - Adaptación"
+ *                     createdAt: "2024-01-01T12:00:00.000Z"
+ *                     plan:
+ *                       id: "550e8400-e29b-41d4-a716-446655440000"
+ *                       title: "Plan de Fuerza - Enero 2024"
+ *                       description: "Plan enfocado en desarrollo de fuerza básica"
+ *       400:
+ *         description: Datos inválidos
  *         content:
  *           application/json:
  *             schema:
- *               $ref: '#/components/schemas/UserStatsResponse'
- *             examples:
- *               usuario_activo:
- *                 summary: Estadísticas de usuario activo
- *                 value:
- *                   totalPlans: 5
- *                   completedSessions: 12
- *                   totalExerciseTracking: 68
- *                   completedExercises: 58
- *                   progressPercentage: 85.3
- *               usuario_principiante:
- *                 summary: Estadísticas de usuario principiante
- *                 value:
- *                   totalPlans: 1
- *                   completedSessions: 2
- *                   totalExerciseTracking: 15
- *                   completedExercises: 8
- *                   progressPercentage: 53.3
- *               usuario_avanzado:
- *                 summary: Estadísticas de usuario avanzado
- *                 value:
- *                   totalPlans: 8
- *                   completedSessions: 25
- *                   totalExerciseTracking: 150
- *                   completedExercises: 142
- *                   progressPercentage: 94.7
+ *               $ref: '#/components/schemas/Error'
  *       404:
- *         description: Usuario no encontrado
+ *         description: Plan no encontrado
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
+router.post('/weeks', WeekController.createWeek)
+
+/**
+ * @swagger
+ * /weeks/{id}:
+ *   get:
+ *     summary: Obtener semana por ID
+ *     description: Obtiene una semana específica con todas sus sesiones
+ *     tags: [Weeks]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: ID de la semana
+ *         example: "650e8400-e29b-41d4-a716-446655440001"
+ *     responses:
+ *       200:
+ *         description: Detalles de la semana
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 week:
+ *                   $ref: '#/components/schemas/Week'
+ *       404:
+ *         description: Semana no encontrada
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *   put:
+ *     summary: Actualizar semana
+ *     description: Actualiza el título de una semana existente
+ *     tags: [Weeks]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: ID de la semana a actualizar
+ *         example: "650e8400-e29b-41d4-a716-446655440001"
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               title:
+ *                 type: string
+ *                 minLength: 1
+ *                 description: Nuevo título de la semana
+ *                 example: "Semana 1 - Adaptación Modificada"
+ *           examples:
+ *             actualizar_titulo:
+ *               summary: Actualizar título
+ *               value:
+ *                 title: "Semana 1 - Adaptación Modificada"
+ *     responses:
+ *       200:
+ *         description: Semana actualizada exitosamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                 week:
+ *                   $ref: '#/components/schemas/Week'
+ *       400:
+ *         description: Datos inválidos
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       404:
+ *         description: Semana no encontrada
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *   delete:
+ *     summary: Eliminar semana
+ *     description: Elimina una semana y todas sus sesiones asociadas
+ *     tags: [Weeks]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: ID de la semana a eliminar
+ *         example: "650e8400-e29b-41d4-a716-446655440001"
+ *     responses:
+ *       200:
+ *         description: Semana eliminada exitosamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: "Week deleted successfully"
+ *       404:
+ *         description: Semana no encontrada
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
+router.get('/weeks/:id', WeekController.getWeekById)
+router.put('/weeks/:id', WeekController.updateWeek)
+router.delete('/weeks/:id', WeekController.deleteWeek)
+
+// ===== RUTAS DE SESIONES =====
+
+/**
+ * @swagger
+ * /sessions:
+ *   post:
+ *     summary: Crear nueva sesión en una semana
+ *     description: Crea una nueva sesión de entrenamiento dentro de una semana existente
+ *     tags: [Sessions]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/CreateSessionRequest'
+ *           examples:
+ *             session_tren_superior:
+ *               summary: Sesión de tren superior
+ *               value:
+ *                 weekId: "650e8400-e29b-41d4-a716-446655440001"
+ *                 sessionNumber: 1
+ *                 name: "Día 1 - Tren Superior"
+ *             session_tren_inferior:
+ *               summary: Sesión de tren inferior
+ *               value:
+ *                 weekId: "650e8400-e29b-41d4-a716-446655440001"
+ *                 sessionNumber: 2
+ *                 name: "Día 2 - Tren Inferior"
+ *             session_fullbody:
+ *               summary: Sesión full body
+ *               value:
+ *                 weekId: "650e8400-e29b-41d4-a716-446655440002"
+ *                 sessionNumber: 1
+ *                 name: "Día 1 - Full Body"
+ *             session_cardio:
+ *               summary: Sesión de cardio
+ *               value:
+ *                 weekId: "650e8400-e29b-41d4-a716-446655440001"
+ *                 sessionNumber: 3
+ *                 name: "Día 3 - Cardio HIIT"
+ *     responses:
+ *       201:
+ *         description: Sesión creada exitosamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                 session:
+ *                   $ref: '#/components/schemas/PlanSession'
+ *             examples:
+ *               session_created:
+ *                 summary: Sesión creada exitosamente
+ *                 value:
+ *                   message: "Session created successfully"
+ *                   session:
+ *                     id: "660e8400-e29b-41d4-a716-446655440001"
+ *                     weekId: "650e8400-e29b-41d4-a716-446655440001"
+ *                     sessionNumber: 1
+ *                     name: "Día 1 - Tren Superior"
+ *                     completed: false
+ *                     createdAt: "2024-01-01T13:00:00.000Z"
+ *       400:
+ *         description: Datos inválidos
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       404:
+ *         description: Semana no encontrada
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       409:
+ *         description: Ya existe una sesión con este número en la semana
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
+router.post('/sessions', PlanController.createSession)
+
+/**
+ * @swagger
+ * /sessions/{id}:
+ *   put:
+ *     summary: Actualizar sesión
+ *     description: Actualiza los campos de una sesión específica (nombre, número de sesión, estado de completado)
+ *     tags: [Sessions]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: ID de la sesión a actualizar
+ *         example: "660e8400-e29b-41d4-a716-446655440001"
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               sessionNumber:
+ *                 type: integer
+ *                 minimum: 1
+ *                 maximum: 5
+ *                 description: Número de la sesión dentro de la semana
+ *               name:
+ *                 type: string
+ *                 minLength: 1
+ *                 description: Nombre de la sesión
+ *               completed:
+ *                 type: boolean
+ *                 description: Estado de completado de la sesión
+ *           examples:
+ *             update_name:
+ *               summary: Actualizar nombre de sesión
+ *               value:
+ *                 name: "Sesión 1 - Tren Superior Modificado"
+ *             update_session_number:
+ *               summary: Cambiar número de sesión
+ *               value:
+ *                 sessionNumber: 3
+ *             update_completed:
+ *               summary: Marcar como completada
+ *               value:
+ *                 completed: true
+ *             update_multiple:
+ *               summary: Actualizar múltiples campos
+ *               value:
+ *                 name: "Sesión 2 - Tren Inferior Avanzado"
+ *                 sessionNumber: 2
+ *                 completed: false
+ *     responses:
+ *       200:
+ *         description: Sesión actualizada exitosamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                 session:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: string
+ *                       format: uuid
+ *                     weekId:
+ *                       type: string
+ *                       format: uuid
+ *                     sessionNumber:
+ *                       type: integer
+ *                     name:
+ *                       type: string
+ *                     completed:
+ *                       type: boolean
+ *                     createdAt:
+ *                       type: string
+ *                       format: date-time
+ *                     week:
+ *                       type: object
+ *                       properties:
+ *                         id:
+ *                           type: string
+ *                           format: uuid
+ *                         title:
+ *                           type: string
+ *                         planId:
+ *                           type: string
+ *                           format: uuid
+ *             examples:
+ *               session_updated:
+ *                 summary: Sesión actualizada exitosamente
+ *                 value:
+ *                   message: "Session updated successfully"
+ *                   session:
+ *                     id: "660e8400-e29b-41d4-a716-446655440001"
+ *                     weekId: "650e8400-e29b-41d4-a716-446655440001"
+ *                     sessionNumber: 1
+ *                     name: "Día 1 - Tren Superior Modificado"
+ *                     completed: false
+ *                     createdAt: "2024-01-01T13:00:00.000Z"
+ *                     week:
+ *                       id: "650e8400-e29b-41d4-a716-446655440001"
+ *                       title: "Semana 1 - Adaptación"
+ *                       planId: "550e8400-e29b-41d4-a716-446655440000"
+ *       400:
+ *         description: Datos inválidos
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       404:
+ *         description: Sesión no encontrada
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       409:
+ *         description: Ya existe una sesión con este número en la semana
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
+router.put('/sessions/:id', PlanController.updateSession)
+
+/**
+ * @swagger
+ * /sessions/{id}/complete:
+ *   put:
+ *     summary: Marcar sesión como completada
+ *     description: Marca una sesión específica como completada. Este endpoint no requiere requestBody ya que automáticamente establece completed=true.
+ *     tags: [Sessions]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: ID de la sesión a completar
+ *         example: "660e8400-e29b-41d4-a716-446655440001"
+ *     requestBody:
+ *       description: Este endpoint no requiere datos en el body. La acción se ejecuta automáticamente al hacer PUT a la URL.
+ *       required: false
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties: {}
+ *           examples:
+ *             empty_body:
+ *               summary: Sin datos en el body
+ *               value: {}
+ *             completar_sesion:
+ *               summary: Completar sesión (body vacío)
+ *               description: No se necesitan datos adicionales, solo hacer PUT request
+ *               value: {}
+ *     responses:
+ *       200:
+ *         description: Sesión marcada como completada exitosamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                 session:
+ *                   $ref: '#/components/schemas/PlanSession'
+ *             examples:
+ *               session_completed:
+ *                 summary: Sesión completada exitosamente
+ *                 value:
+ *                   message: "Session marked as completed"
+ *                   session:
+ *                     id: "660e8400-e29b-41d4-a716-446655440001"
+ *                     weekId: "650e8400-e29b-41d4-a716-446655440001"
+ *                     sessionNumber: 1
+ *                     name: "Día 1 - Tren Superior"
+ *                     completed: true
+ *                     createdAt: "2024-01-01T13:00:00.000Z"
+ *               session_tren_inferior_completed:
+ *                 summary: Sesión de tren inferior completada
+ *                 value:
+ *                   message: "Session marked as completed"
+ *                   session:
+ *                     id: "661e8400-e29b-41d4-a716-446655440002"
+ *                     weekId: "650e8400-e29b-41d4-a716-446655440001"
+ *                     sessionNumber: 2
+ *                     name: "Día 2 - Tren Inferior"
+ *                     completed: true
+ *                     createdAt: "2024-01-02T10:00:00.000Z"
+ *       404:
+ *         description: Sesión no encontrada
  *         content:
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/Error'
  *             examples:
- *               user_not_found:
- *                 summary: Usuario no encontrado
+ *               session_not_found:
+ *                 summary: Sesión no encontrada
  *                 value:
  *                   error: "NotFound"
- *                   message: "Usuario no encontrado"
- *                   details: []
+ *                   message: "Session not found"
+ *       400:
+ *         description: Sesión ya completada o error de validación
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *             examples:
+ *               already_completed:
+ *                 summary: Sesión ya completada
+ *                 value:
+ *                   error: "ValidationError"
+ *                   message: "Session already completed"
  */
-router.get('/users/:userId/stats', TrackingController.getUserStats)
+router.put('/sessions/:id/complete', PlanController.completeSession)
+
+// ===== RUTAS DE BLOQUES =====
+
+/**
+ * @swagger
+ * /blocks:
+ *   post:
+ *     summary: Crear nuevo bloque en una sesión
+ *     description: Crea un nuevo bloque de ejercicios dentro de una sesión específica
+ *     tags: [Blocks]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/CreateBlockRequest'
+ *           examples:
+ *             bloque_principal:
+ *               summary: Bloque principal
+ *               value:
+ *                 sessionId: "660e8400-e29b-41d4-a716-446655440001"
+ *                 title: "Bloque A - Ejercicios principales"
+ *                 position: 1
+ *                 status: "pending"
+ *             bloque_accesorios:
+ *               summary: Bloque de accesorios
+ *               value:
+ *                 sessionId: "660e8400-e29b-41d4-a716-446655440001"
+ *                 title: "Bloque B - Ejercicios accesorios"
+ *                 position: 2
+ *                 status: "pending"
+ *             bloque_cardio:
+ *               summary: Bloque cardiovascular
+ *               value:
+ *                 sessionId: "661e8400-e29b-41d4-a716-446655440002"
+ *                 title: "Bloque C - Trabajo cardiovascular"
+ *                 position: 3
+ *                 status: "pending"
+ *     responses:
+ *       201:
+ *         description: Bloque creado exitosamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                 block:
+ *                   $ref: '#/components/schemas/SessionBlock'
+ *             examples:
+ *               block_created:
+ *                 summary: Bloque creado exitosamente
+ *                 value:
+ *                   message: "Bloque creado exitosamente"
+ *                   block:
+ *                     id: "770e8400-e29b-41d4-a716-446655440002"
+ *                     sessionId: "660e8400-e29b-41d4-a716-446655440001"
+ *                     title: "Bloque A - Ejercicios principales"
+ *                     position: 1
+ *                     status: "pending"
+ *                     createdAt: "2024-01-01T13:30:00.000Z"
+ *       400:
+ *         description: Datos inválidos
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       404:
+ *         description: Sesión no encontrada
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
+router.post('/blocks', PlanController.createBlock)
+
+/**
+ * @swagger
+ * /blocks/{id}:
+ *   put:
+ *     summary: Actualizar bloque
+ *     description: Actualiza los datos de un bloque existente. Permite modificar el título, posición y/o estado del bloque.
+ *     tags: [Blocks]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: ID del bloque a actualizar
+ *         example: "770e8400-e29b-41d4-a716-446655440002"
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/UpdateBlockRequest'
+ *           examples:
+ *             actualizar_titulo_posicion:
+ *               summary: Actualizar título y posición
+ *               value:
+ *                 title: "Bloque A Modificado - Ejercicios principales"
+ *                 position: 2
+ *             cambiar_estado:
+ *               summary: Cambiar estado del bloque
+ *               value:
+ *                 status: "in_progress"
+ *             actualizar_completo:
+ *               summary: Actualización completa
+ *               value:
+ *                 title: "Bloque B - Ejercicios accesorios avanzados"
+ *                 position: 3
+ *                 status: "completed"
+ *             solo_titulo:
+ *               summary: Actualizar solo título
+ *               value:
+ *                 title: "Bloque Principal Modificado"
+ *     responses:
+ *       200:
+ *         description: Bloque actualizado exitosamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                 block:
+ *                   $ref: '#/components/schemas/SessionBlock'
+ *             examples:
+ *               block_actualizado:
+ *                 summary: Bloque actualizado exitosamente
+ *                 value:
+ *                   message: "Block updated successfully"
+ *                   block:
+ *                     id: "770e8400-e29b-41d4-a716-446655440002"
+ *                     sessionId: "660e8400-e29b-41d4-a716-446655440001"
+ *                     title: "Bloque A Modificado - Ejercicios principales"
+ *                     position: 2
+ *                     status: "in_progress"
+ *                     createdAt: "2024-01-01T13:30:00.000Z"
+ *                     session:
+ *                       id: "660e8400-e29b-41d4-a716-446655440001"
+ *                       name: "Sesión 1 - Tren Superior"
+ *                       sessionNumber: 1
+ *       400:
+ *         description: Datos inválidos
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       404:
+ *         description: Bloque no encontrado
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *   delete:
+ *     summary: Eliminar bloque
+ *     description: Elimina un bloque específico y todos sus ejercicios asociados.
+ *     tags: [Blocks]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: ID del bloque a eliminar
+ *         example: "770e8400-e29b-41d4-a716-446655440002"
+ *     responses:
+ *       200:
+ *         description: Bloque eliminado exitosamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *             examples:
+ *               block_eliminado:
+ *                 summary: Bloque eliminado exitosamente
+ *                 value:
+ *                   message: "Block deleted successfully"
+ *       404:
+ *         description: Bloque no encontrado
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
+router.put('/blocks/:id', PlanController.updateBlock)
+router.delete('/blocks/:id', PlanController.deleteBlock)
+
+// ===== RUTAS DE EJERCICIOS =====
+
+/**
+ * @swagger
+ * /exercises:
+ *   post:
+ *     summary: Crear nuevo ejercicio en un bloque
+ *     description: Crea un nuevo ejercicio dentro de un bloque específico de una sesión
+ *     tags: [Exercises]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/CreateExerciseRequest'
+ *           examples:
+ *             press_banca:
+ *               summary: Press de banca
+ *               value:
+ *                 blockId: "770e8400-e29b-41d4-a716-446655440002"
+ *                 exerciseName: "Press de Banca"
+ *                 series: 4
+ *                 reps: "8-10"
+ *                 kg: 80.5
+ *                 rest: "2-3 min"
+ *                 observations: "Mantener control en la fase excéntrica"
+ *                 status: "pending"
+ *                 link: "https://www.youtube.com/watch?v=ejemplo-press-banca"
+ *             sentadilla:
+ *               summary: Sentadilla
+ *               value:
+ *                 blockId: "770e8400-e29b-41d4-a716-446655440002"
+ *                 exerciseName: "Sentadilla"
+ *                 series: 4
+ *                 reps: "6-8"
+ *                 rest: "3-4 min"
+ *                 observations: "Profundidad completa, rodillas alineadas"
+ *                 status: "pending"
+ *                 link: "https://www.youtube.com/watch?v=ejemplo-sentadilla"
+ *             curl_biceps:
+ *               summary: Curl de bíceps
+ *               value:
+ *                 blockId: "771e8400-e29b-41d4-a716-446655440003"
+ *                 exerciseName: "Curl de Bíceps con Mancuernas"
+ *                 series: 3
+ *                 reps: "12-15"
+ *                 rest: "60-90 seg"
+ *                 status: "pending"
+ *                 link: "https://www.youtube.com/watch?v=ejemplo-curl-biceps"
+ *             cardio:
+ *               summary: Ejercicio cardiovascular
+ *               value:
+ *                 blockId: "772e8400-e29b-41d4-a716-446655440004"
+ *                 exerciseName: "Caminata en Cinta"
+ *                 series: 1
+ *                 reps: "20 min"
+ *                 rest: null
+ *                 observations: "Mantener ritmo constante, inclinación 3%"
+ *                 status: "pending"
+ *                 link: "https://www.youtube.com/watch?v=ejemplo-cardio-cinta"
+ *     responses:
+ *       201:
+ *         description: Ejercicio creado exitosamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                 exercise:
+ *                   $ref: '#/components/schemas/BlockExercise'
+ *             examples:
+ *               exercise_created:
+ *                 summary: Ejercicio creado exitosamente
+ *                 value:
+ *                   message: "Ejercicio creado exitosamente"
+ *                   exercise:
+ *                     id: "880e8400-e29b-41d4-a716-446655440003"
+ *                     blockId: "770e8400-e29b-41d4-a716-446655440002"
+ *                     exerciseName: "Press de Banca"
+ *                     series: 4
+ *                     reps: "8-10"
+ *                     rest: "2-3 min"
+ *                     observations: "Mantener control en la fase excéntrica"
+ *                     status: "pending"
+ *                     createdAt: "2024-01-01T14:00:00.000Z"
+ *                     link: "https://www.youtube.com/watch?v=ejemplo-press-banca"
+ *       400:
+ *         description: Datos inválidos
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       404:
+ *         description: Bloque no encontrado
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
+router.post('/exercises', PlanController.createExercise)
+
+/**
+ * @swagger
+ * /exercises/{id}:
+ *   put:
+ *     summary: Actualizar ejercicio
+ *     description: Actualiza los datos de un ejercicio, incluyendo progreso del usuario (kg, pse, rir, etc.)
+ *     tags: [Exercises]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: ID del ejercicio a actualizar
+ *         example: "880e8400-e29b-41d4-a716-446655440003"
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               exerciseName:
+ *                 type: string
+ *                 description: "Nombre del ejercicio (opcional)"
+ *                 example: "Press de Banca Inclinado"
+ *               series:
+ *                 type: integer
+ *                 minimum: 1
+ *                 description: "Número de series (opcional)"
+ *                 example: 4
+ *               reps:
+ *                 type: string
+ *                 description: "Especificación de repeticiones (opcional)"
+ *                 example: "8-10"
+ *               kg:
+ *                 type: number
+ *                 description: "Peso utilizado por el usuario (opcional)"
+ *                 example: 85.5
+ *               rest:
+ *                 type: string
+ *                 description: "Tiempo de descanso (opcional)"
+ *                 example: "2-3 min"
+ *               observations:
+ *                 type: string
+ *                 description: "Observaciones del admin o usuario (opcional)"
+ *                 example: "Excelente técnica, aumentar peso próxima vez"
+ *               status:
+ *                 type: string
+ *                 enum: ['pending', 'in_progress', 'completed']
+ *                 description: "Estado del ejercicio (opcional)"
+ *                 example: "completed"
+ *               pse:
+ *                 type: string
+ *                 description: "Esfuerzo percibido 1-10 (opcional)"
+ *                 example: "8"
+ *               rir:
+ *                 type: string
+ *                 description: "Repeticiones en reserva (opcional)"
+ *                 example: "2"
+ *               done:
+ *                 type: boolean
+ *                 description: "Marcar como completado (opcional)"
+ *                 example: true
+ *               link:
+ *                 type: string
+ *                 description: "Enlace de referencia para el ejercicio (opcional)"
+ *                 example: "https://www.youtube.com/watch?v=ejemplo-ejercicio"
+ *           examples:
+ *             actualizar_progreso_usuario:
+ *               summary: "Usuario actualiza su progreso"
+ *               value:
+ *                 kg: 87.5
+ *                 pse: "8"
+ *                 rir: "2"
+ *                 observations: "Me sentí bien, listo para más peso"
+ *                 status: "completed"
+ *                 done: true
+ *             comentario_admin:
+ *               summary: "Admin deja feedback"
+ *               value:
+ *                 observations: "Admin: Excelente progreso, técnica perfecta. Subir a 90kg la próxima vez"
+ *                 status: "completed"
+ *             modificar_ejercicio:
+ *               summary: "Modificar datos del ejercicio"
+ *               value:
+ *                 exerciseName: "Press de Banca con Pausa"
+ *                 series: 5
+ *                 reps: "6-8"
+ *                 kg: 90
+ *                 link: "https://www.youtube.com/watch?v=ejemplo-press-banca-pausa"
+ *             marcar_en_progreso:
+ *               summary: "Marcar como en progreso"
+ *               value:
+ *                 status: "in_progress"
+ *                 pse: "7"
+ *                 observations: "Primera serie completada"
+ *     responses:
+ *       200:
+ *         description: Ejercicio actualizado exitosamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                 exercise:
+ *                   $ref: '#/components/schemas/BlockExercise'
+ *             examples:
+ *               exercise_actualizado:
+ *                 summary: Ejercicio actualizado exitosamente
+ *                 value:
+ *                   message: "Exercise updated successfully"
+ *                   exercise:
+ *                     id: "880e8400-e29b-41d4-a716-446655440003"
+ *                     blockId: "770e8400-e29b-41d4-a716-446655440002"
+ *                     exerciseName: "Press de Banca"
+ *                     series: 4
+ *                     reps: "8-10"
+ *                     kg: 87.5
+ *                     rest: "2-3 min"
+ *                     observations: "Excelente progreso, técnica perfecta"
+ *                     status: "completed"
+ *                     pse: "8"
+ *                     rir: "2"
+ *                     done: true
+ *                     completedAt: "2024-01-08T15:30:00.000Z"
+ *                     createdAt: "2024-01-01T14:00:00.000Z"
+ *                     link: "https://www.youtube.com/watch?v=ejemplo-press-banca"
+ *       400:
+ *         description: Datos inválidos
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       404:
+ *         description: Ejercicio no encontrado
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *   delete:
+ *     summary: Eliminar ejercicio
+ *     description: Elimina un ejercicio específico del bloque
+ *     tags: [Exercises]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: ID del ejercicio a eliminar
+ *         example: "880e8400-e29b-41d4-a716-446655440003"
+ *     responses:
+ *       200:
+ *         description: Ejercicio eliminado exitosamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *             examples:
+ *               exercise_eliminado:
+ *                 summary: Ejercicio eliminado exitosamente
+ *                 value:
+ *                   message: "Exercise deleted successfully"
+ *       404:
+ *         description: Ejercicio no encontrado
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
+router.put('/exercises/:id', PlanController.updateExercise)
+router.delete('/exercises/:id', PlanController.deleteExercise)
+
+
 
 // ===== RUTAS ADMINISTRATIVAS =====
-// Endpoint para crear usuario administrador
+/**
+ * @swagger
+ * /admin/setup:
+ *   post:
+ *     summary: Crear usuario administrador inicial
+ *     description: Crea el primer usuario administrador del sistema. Solo funciona si no existe ningún administrador.
+ *     tags: [Admin]
+ *     responses:
+ *       201:
+ *         description: Administrador creado exitosamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: "Admin user created successfully"
+ *                 credentials:
+ *                   type: object
+ *                   properties:
+ *                     email:
+ *                       type: string
+ *                       example: "admin@fitapp.com"
+ *                     password:
+ *                       type: string
+ *                       example: "admin123"
+ *                     note:
+ *                       type: string
+ *                       example: "Please change this password immediately after first login"
+ *                 user:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: string
+ *                       format: uuid
+ *                     name:
+ *                       type: string
+ *                       example: "Administrator"
+ *                     email:
+ *                       type: string
+ *                       example: "admin@fitapp.com"
+ *                     role:
+ *                       type: string
+ *                       example: "admin"
+ *                     createdAt:
+ *                       type: string
+ *                       format: date-time
+ *       409:
+ *         description: Ya existe un administrador
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ *                   example: "Admin user already exists"
+ *                 message:
+ *                   type: string
+ *                   example: "An administrator user has already been created"
+ *                 hint:
+ *                   type: string
+ *                   example: "Use email: admin@fitapp.com and password: admin123 to login"
+ */
 router.post('/admin/setup', async (req: Request, res: Response, next: NextFunction) => {
   try {
     // Verificar si ya existe un admin

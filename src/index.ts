@@ -4,6 +4,7 @@ import helmet from 'helmet';
 import dotenv from 'dotenv';
 
 import { errorHandler } from './middlewares/errorHandler';
+import { initializeDatabase } from './config/database';
 import routes from './routes/index';
 import { specs, swaggerUi } from './config/swagger';
 
@@ -105,13 +106,25 @@ app.use('*', (req, res) => {
 // Error handling middleware
 app.use(errorHandler);
 
-// Start server
-app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
-  console.log(`📊 Environment: ${process.env.NODE_ENV}`);
-  console.log(`🔗 Health check: http://localhost:${PORT}/health`);
-  console.log(`📋 API Base URL: http://localhost:${PORT}/api`);
-  console.log(`📚 API Documentation: http://localhost:${PORT}/api-docs`);
-});
+// Start server with database initialization
+const startServer = async () => {
+  try {
+    console.log('🔄 Initializing database connection...');
+    await initializeDatabase();
+    
+    app.listen(PORT, () => {
+      console.log(`🚀 Server running on port ${PORT}`);
+      console.log(`📊 Environment: ${process.env.NODE_ENV}`);
+      console.log(`🔗 Health check: http://localhost:${PORT}/health`);
+      console.log(`📋 API Base URL: http://localhost:${PORT}/api`);
+      console.log(`📚 API Documentation: http://localhost:${PORT}/api-docs`);
+    });
+  } catch (error) {
+    console.error('❌ Failed to start server:', error);
+    process.exit(1);
+  }
+};
+
+startServer();
 
 export default app;
